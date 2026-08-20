@@ -1,0 +1,95 @@
+{
+  "product": "Continuum",
+  "context": "hybrid_fullstack_dashboard",
+  "theme": "dark-first with a restrained light option",
+  "design_concept": "The Operations Observatory: a Swiss information grid fused with field-notebook annotations and an aviation cockpit's calm, high-signal status language. The fusion makes organizational risk feel observable and actionable rather than abstract or alarmist.",
+  "discovery": {
+    "audience": ["founders", "COOs", "chiefs of staff", "operations and resilience leaders"],
+    "primary_tasks": ["understand organizational resilience at a glance", "locate critical people and process dependencies", "inspect Sarah Mitchell's human manual", "simulate absence duration and impact propagation", "prioritize mitigation work and measure score improvement"],
+    "success_actions": ["open a critical dependency", "run a 7/30/90/permanent absence scenario", "create or prioritize a mitigation action", "compare baseline and improved resilience score"],
+    "emotional_tone": "calm urgency, forensic clarity, earned trust",
+    "story_arc": "Discover the signal → Understand the chain → Simulate the loss → Fix the weak link → Measure progress"
+  },
+  "research_references": [
+    {"source": "SaaSFrame dashboard patterns", "descriptor": "zone-based hierarchy: global controls, 3–6 KPI summaries, primary charts, then detail tables; progressive disclosure and shared filters"},
+    {"source": "Shadcn Admin / Linear-style dark dashboards", "descriptor": "near-black layered surfaces, CSS-variable theming, crisp 1px borders, dense but legible information hierarchy"},
+    {"source": "2026 dashboard accessibility guidance", "descriptor": "semantic status colors, redundant labels/icons, high contrast, keyboard access, loading/empty/error states, no decorative 3D charts"}
+  ],
+  "typography": {
+    "heading": {"family": "IBM Plex Sans", "weights": [500, 650, 700], "usage": "dashboard titles, section headings, metric values; tracking-tight, never Inter"},
+    "body": {"family": "IBM Plex Sans", "weights": [400, 500], "usage": "navigation, descriptions, tables, forms; leading-relaxed"},
+    "mono": {"family": "IBM Plex Mono", "usage": "scores, IDs, timestamps, evidence confidence, map labels"},
+    "scale": {"h1": "text-4xl sm:text-5xl lg:text-6xl", "h2": "text-2xl sm:text-3xl lg:text-4xl", "h3": "text-xl sm:text-2xl", "h4": "text-lg sm:text-xl", "body": "text-base", "label": "text-xs uppercase tracking-[0.2em]"}
+  },
+  "colors": {
+    "archetype": "Swiss & high-contrast with cool observatory accents",
+    "background": "#101519",
+    "surface": "#172026",
+    "surface_raised": "#202B32",
+    "border": "#34434A",
+    "text": "#F2F5F3",
+    "muted_text": "#AAB8B7",
+    "primary": "#D7F36B",
+    "primary_text": "#172026",
+    "info": "#8CC7E8",
+    "success": "#9AD7A2",
+    "warning": "#F2BE72",
+    "danger": "#F28A82",
+    "rule": "Use color only for action, status, and score semantics; pair every color with text/icon. Never use pure black, gray, full-screen gradients, or forbidden teal/violet." 
+  },
+  "visual_enhancers": ["subtle grain/noise texture at low opacity", "thin coordinate/grid lines in map views", "annotation ticks and evidence dots", "layered solid surfaces rather than gradients", "custom scrollbar with no gutter", "small status pulse only when indicating live simulation state"],
+  "component_name": {
+    "global_shell": "AppShell",
+    "navigation": "ObservatorySidebar",
+    "top_bar": "ContextHeader",
+    "dashboard": "ResilienceOverview",
+    "map": "DependencyMap",
+    "person": "HumanManual",
+    "simulation": "AbsenceSimulator",
+    "results": "ScenarioResultView",
+    "actions": "ActionCenter",
+    "shared": ["ScoreRing", "MetricStrip", "DependencyNode", "EvidenceBadge", "ConfidenceLabel", "StatusBadge", "EmptyState", "Skeleton"]
+  },
+  "component_path": "/app/frontend/src/components/ and /app/frontend/src/components/ui/",
+  "grids": {
+    "dashboard": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6; dense high-density mode; primary chart col-span-2 row-span-2, feed col-span-1 row-span-2",
+    "map": "grid-cols-1 lg:grid-cols-12 gap-6; map col-span-8, selected-detail rail col-span-4",
+    "action_center": "grid-cols-1 md:grid-cols-8 gap-6; prioritized queue col-span-5, impact summary col-span-3",
+    "rules": ["mobile-first", "grid items are direct children", "use align-items:start", "use p-6 or p-8 inside bordered containers", "do not force every cell to fill if it harms hierarchy"]
+  },
+  "layouts": {
+    "shell": "Desktop: fixed left sidebar 248px plus content; mobile: solid top header and sheet navigation. Header always has opaque/semi-opaque background and z-50.",
+    "dashboard": "Start with a left-aligned title and scenario context. Follow with 4 KPI metrics, then a dominant resilience trend/score panel, then dependency alerts and recent evidence.",
+    "dependency_map": "Use a dark canvas with visible coordinate grid. People are warm nodes, processes are outlined nodes, systems/vendors are cool nodes. Selected node gets a primary outline and adjacent links brighten.",
+    "human_manual": "Profile header, role and criticality, then operating knowledge in sections: owns, knows, backup, failure modes, evidence, suggested actions.",
+    "simulation": "Duration selector as Shadcn tabs or segmented control, not native select. Show scenario assumptions before run. Results use impact chain, affected processes/clients/systems, score delta, and comparison toggle.",
+    "action_center": "Flat bordered queue with priority, owner, expected score lift, evidence, and status. Detail drawer for editing; use Sonner for confirmation."
+  },
+  "motion": {
+    "principles": "restrained and explanatory, never decorative noise",
+    "entrance": "stagger dashboard sections 40ms apart with opacity and translateY only",
+    "hover": "specific transitions for transform, border-color, background-color, opacity; 160–220ms",
+    "simulation": "animate propagation along dependency links sequentially, with a reduced-motion instant state",
+    "press": "scale 0.98 on buttons with explicit transition-transform",
+    "reduced_motion": "@media (prefers-reduced-motion: reduce) disables propagation and entrance transforms"
+  },
+  "accessibility": {
+    "contrast": "minimum WCAG AA 4.5:1 normal text and 3:1 large/interactive; verify APCA where possible",
+    "keyboard": "visible high-contrast focus ring; map nodes reachable by keyboard; dialogs trap focus",
+    "redundancy": "status color plus label/icon; charts have text summaries and accessible tables",
+    "testing": "Every button, link, input, menu, score, alert, scenario result, and confirmation must include a role-based kebab-case data-testid",
+    "surfaces": "Never use complete transparent backgrounds behind content; dropdowns/dialogs use solid or opaque glass surfaces"
+  },
+  "media": {"needed": false, "image_urls": [], "guidance": "Product is a data-heavy dashboard; use CSS texture and SVG diagram geometry instead of stock photography or placeholder images."},
+  "3d_libraries": {"use": false, "reason": "Clarity and deterministic demo performance beat immersion for this dashboard; use SVG/CSS dependency graph and Recharts only where appropriate."},
+  "implementation": {
+    "stack": "React JavaScript files (.js/.jsx), Tailwind CSS, shadcn/ui primitives, FastAPI backend",
+    "interactive_components": "Use shadcn Button, Tabs, Dialog, Drawer, DropdownMenu, Select, Input, Table, Badge, Progress, Tooltip; customize surfaces and radius. Do not build advanced interactions from native HTML.",
+    "charts": "Use Recharts or shadcn chart patterns for simple trend/comparison charts; avoid 3D effects and excessive gridlines.",
+    "auth": "Magic-link flow may be represented with a deterministic seeded demo state if backend is not connected; clearly label mocked integration in UI or handoff.",
+    "data": "Seed Northstar Labs with exact stated counts and deterministic scores: baseline 64, Sarah Mitchell 87. Keep organization scope in every query/state boundary.",
+    "universal_ui_ux_guidelines": ["Avoid generic centered layouts and uniform cards", "Use generous spacing and left-aligned reading flow", "No transition-all", "Use solid dark layers, not dark gradients", "Use pill or sharp modern buttons with explicit hover/focus/pressed states", "Include loading, empty, error, and success states", "Prefer cardless bordered rectangles for data", "Use Sonner for toasts", "All key elements have data-testid", "Keep desktop navigation links visible and mobile navigation in a sheet"]
+  },
+  "instructions_to_main_agent": "Implement the dashboard as a calm, high-signal observatory rather than a generic SaaS admin. The demo path must be obvious within three minutes: Overview → Sarah Mitchell → Simulate 30 days → inspect impact → create mitigation → see score improvement. Preserve explanations, evidence/confidence labels, and organization context at every step. Use .js/.jsx, not .tsx.",
+  "image_urls": []
+}
