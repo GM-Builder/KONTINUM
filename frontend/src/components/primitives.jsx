@@ -29,7 +29,7 @@ export function ScoreRing({ score, coverage = 0, size = "md", name = "score" }) 
     >
       <div className="score-ring-inner">
         <strong>{score}</strong>
-        <span>{coverage ? `${coverage}% doc` : "/100"}</span>
+        <span>{coverage ? `${coverage}% dok` : "/100"}</span>
       </div>
     </div>
   );
@@ -78,10 +78,10 @@ export function SectionHeading({ eyebrow, title, action }) {
   );
 }
 
-export function LoadingState({ label = "Mapping organizational dependencies…" }) {
+export function LoadingState({ label = "Memetakan ketergantungan organisasi…" }) {
   return (
     <div className="loading-state" data-testid="loading-state">
-      <span className="loading-mark">C</span>
+      <span className="loading-mark">K</span>
       <p>{label}</p>
     </div>
   );
@@ -94,7 +94,7 @@ export function ErrorState({ message, onRetry }) {
       <p>{message}</p>
       {onRetry ? (
         <button className="secondary-button" onClick={onRetry} data-testid="retry-button">
-          Try again
+          Coba lagi
         </button>
       ) : null}
     </div>

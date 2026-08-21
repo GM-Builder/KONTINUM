@@ -7,6 +7,14 @@ import {
 } from "@/components/primitives";
 
 const KIND_ORDER = ["process", "client", "vendor", "system", "knowledge"];
+const KIND_LABEL = {
+  person: "orang",
+  process: "proses",
+  client: "klien",
+  vendor: "vendor",
+  system: "sistem",
+  knowledge: "pengetahuan",
+};
 
 function layout(nodes) {
   const person = nodes.find((node) => node.kind === "person");
@@ -48,8 +56,8 @@ export default function DependencyMap() {
 
   const positioned = useMemo(() => (data ? layout(data.nodes) : []), [data]);
 
-  if (error) return <ErrorState message={error} onRetry={() => setSearchParams({ focus })} />;
-  if (!data) return <LoadingState label="Tracing dependency relationships…" />;
+  if (error) return <ErrorState message={error} onRetry={() => setSearchParams({ focus: "sarah-mitchell" })} />;
+  if (!data) return <LoadingState label="Melacak relasi ketergantungan…" />;
 
   const person = data.focus_person;
   const detail = selected ? data.nodes.find((node) => node.id === selected) : null;
@@ -59,9 +67,9 @@ export default function DependencyMap() {
     <div className="page map-page" data-testid="dependency-map-page">
       <div className="page-intro">
         <div>
-          <span className="eyebrow">DEPENDENCY MAP / FOCUS MODE</span>
-          <h1>What depends on whom?</h1>
-          <p>Trace observed relationships across processes, clients, vendors, systems and knowledge.</p>
+          <span className="eyebrow">DEPENDENCY MAP / MODE FOKUS</span>
+          <h1>Apa yang bergantung pada siapa?</h1>
+          <p>Lacak relasi yang tercatat pada proses, klien, vendor, sistem, dan pengetahuan.</p>
         </div>
         <div className="filter-row">
           <button
@@ -69,20 +77,20 @@ export default function DependencyMap() {
             onClick={() => setCriticalOnly(false)}
             data-testid="map-filter-all-button"
           >
-            All entities
+            Semua entitas
           </button>
           <button
             className={`filter ${criticalOnly ? "active" : ""}`}
             onClick={() => setCriticalOnly(true)}
             data-testid="map-filter-critical-button"
           >
-            <i className="filter-dot critical" /> Critical only
+            <i className="filter-dot critical" /> Hanya kritis
           </button>
         </div>
       </div>
 
       <div className="focus-switcher" data-testid="map-focus-switcher">
-        <span className="eyebrow">FOCUS</span>
+        <span className="eyebrow">FOKUS</span>
         {data.people.slice(0, 5).map((option) => (
           <button
             key={option.id}
@@ -98,7 +106,7 @@ export default function DependencyMap() {
       <div className="map-layout">
         <section className="map-canvas" data-testid="dependency-graph-canvas">
           <div className="coordinates">
-            NORTHSTAR / GRAPH 01 <span>{data.nodes.length} nodes · {data.edges.length} edges</span>
+            NORTHSTAR / GRAF 01 <span>{data.nodes.length} node · {data.edges.length} relasi</span>
           </div>
           <svg className="edges" viewBox="0 0 100 100" preserveAspectRatio="none">
             {data.edges.map((edge) => {
@@ -132,13 +140,13 @@ export default function DependencyMap() {
             >
               <span className="node-dot">{node.kind === "person" ? node.score : node.kind.slice(0, 2).toUpperCase()}</span>
               <b>{node.label}</b>
-              <small>{node.kind}</small>
+              <small>{KIND_LABEL[node.kind]}</small>
             </button>
           ))}
           <div className="map-legend" data-testid="map-legend">
             {["person", "process", "client", "vendor", "system", "knowledge"].map((kind) => (
               <span key={kind}>
-                <i className={`legend-dot node-${kind}`} /> {kind}
+                <i className={`legend-dot node-${kind}`} /> {KIND_LABEL[kind]}
               </span>
             ))}
           </div>
@@ -147,22 +155,23 @@ export default function DependencyMap() {
         <aside className="map-detail panel" data-testid="selected-node-detail">
           {detail && detail.kind !== "person" ? (
             <>
-              <span className="eyebrow">SELECTED NODE</span>
+              <span className="eyebrow">NODE TERPILIH</span>
               <h2>{detail.label}</h2>
               <p className="muted">
-                {detail.kind} · {detail.meta}
+                {KIND_LABEL[detail.kind]} · {detail.meta}
               </p>
               <StatusBadge>{detail.risk}</StatusBadge>
               <p className="muted">
-                This entity depends on {person.name}. Removing that link is what the recovery plan is for.
+                Entitas ini bergantung pada {person.name}. Memutus ketergantungan itulah tujuan
+                rencana pemulihan.
               </p>
               <button className="secondary-button" onClick={() => setSelected(null)} data-testid="clear-selection-button">
-                Back to {person.name}
+                Kembali ke {person.name}
               </button>
             </>
           ) : (
             <>
-              <span className="eyebrow">SELECTED NODE</span>
+              <span className="eyebrow">NODE TERPILIH</span>
               <div className="detail-profile">
                 <ScoreRing score={person.dependency_score} coverage={person.knowledge_coverage} size="lg" name={person.name} />
                 <div>
@@ -172,19 +181,19 @@ export default function DependencyMap() {
                 </div>
               </div>
               <div className="why">
-                <span className="eyebrow">WHY CRITICAL?</span>
+                <span className="eyebrow">MENGAPA KRITIS?</span>
                 <ul>
                   <li>
-                    <b>{person.critical_process_count}</b> critical processes without backup
+                    <b>{person.critical_process_count}</b> proses kritis tanpa backup
                   </li>
                   <li>
-                    <b>{person.client_count}</b> client relationships owned
+                    <b>{person.client_count}</b> relasi klien yang dipegang
                   </li>
                   <li>
-                    <b>{person.trained_backups}</b> fully trained backups
+                    <b>{person.trained_backups}</b> backup terlatih
                   </li>
                   <li>
-                    <b>{person.knowledge_coverage}%</b> knowledge documented
+                    <b>{person.knowledge_coverage}%</b> pengetahuan terdokumentasi
                   </li>
                 </ul>
               </div>
@@ -194,17 +203,17 @@ export default function DependencyMap() {
                   onClick={() => navigate(`/people/${person.id}`)}
                   data-testid="map-view-human-manual-button"
                 >
-                  View Human Manual <ArrowRight size={15} />
+                  Buka Human Manual <ArrowRight size={15} />
                 </button>
                 <button
                   className="secondary-button"
                   onClick={() => navigate(`/simulate/${person.id}`)}
                   data-testid="map-simulate-absence-button"
                 >
-                  Simulate absence
+                  Simulasikan ketidakhadiran
                 </button>
               </div>
-              <EvidenceChip confidence={0.96}>ownership records · {data.edges.length} refs</EvidenceChip>
+              <EvidenceChip confidence={0.96}>catatan kepemilikan · {data.edges.length} rujukan</EvidenceChip>
             </>
           )}
         </aside>

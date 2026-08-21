@@ -1,0 +1,45 @@
+{
+  "summary": "Iteration 2 (KONTINŪM). 37/37 backend pytest passing and full Playwright end-to-end flow passing on desktop + mobile. Covered new features: multi-person scenario simulation (Sarah+Michael 90d -> 32/87, 8 processes, findings prefixed by person id; 400 for >3 people, 400 for empty list, 404 for unknown id; backward compat with person_id payload), share/export (POST /api/scenarios/{run_id}/share idempotent, /api/public/scenarios/{token} accessible without auth, 404 for bad token / unknown run), AI streaming via Gemini 3 Flash (/api/ai/briefing -> ~1700+ chars Bahasa Indonesia SSE ending with [DONE]; /api/ai/ask streams >100 chars referencing real entities; /api/ai/history stores both user+assistant; question <3 chars -> 422), knowledge capture (interview returns 4 ID questions + coverage_gain 25, capture with 4 answers lifts coverage 21->46 and drops Sarah 87->86 while recomputing org score, empty answers -> 400, unknown id -> 404), and re-confirmed canonical numbers (baseline 64, Sarah 87, 47/18/12/7/11 counts, action center completion 64->82->64, single-person 90d 64/39/82 with 7/3/8/4). Frontend Playwright covered: KONTINŪM brand on login+sidebar+mobile+public share, 6 Human Manual tabs, journey 64/39/82 & compare-all 4 columns, AI briefing panel streams 1713 chars, share-scenario-button generates /bagikan/{token} URL, print-scenario-button invokes window.print, multi-person picker gives combined title & 32 score, 4th-person toast 'maksimal tiga orang' fires, Ask panel streams answer and manual-ask-button pre-fills 'Apa saja yang bergantung pada Sarah Mitchell?', knowledge interview empty-submit shows inline error and answered submit fires toast, /bagikan/{token} loads without kontinum_session, action-current-score toggles 82 <-> 64, mobile 430x860 shows 0px horizontal overflow on /overview, /simulate/sarah-mitchell, /actions. End state restored: knowledge_overrides empty, no source='import' people, all mitigation actions Open, Sarah=87, org=64.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Action Center (/actions) - mitigation action titles and rationale",
+        "issues": [
+          "Mitigation action titles are still in English (e.g. 'Assign David Chen as validated secondary owner for Acme Corp', 'Shadow the next Northwind renegotiation…') and their rationale/description text is English too. Per spec every UI + backend finding/insight text must be Bahasa Indonesia (keeping key terms like 'Human Manual', 'Action Center', 'Dependency Map', 'Resilience Score', 'Critical/High' in English). Source: /app/backend/seed_data.py MITIGATION_ACTIONS (title, rationale)."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Translate MITIGATION_ACTIONS[*].title and MITIGATION_ACTIONS[*].rationale in /app/backend/seed_data.py to Bahasa Indonesia (keep 'Action Center' / 'Backup owner' style key terms in English if desired). Titles currently visible in English: 'Assign David Chen as validated secondary owner for Acme Corp', 'Capture pricing exception decision rules', 'Shadow the next Northwind renegotiation' etc."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 884 lines - close to the 700-line guideline. Consider splitting: auth routes, scenarios/share, ai streaming, knowledge into separate routers.",
+    "load_graph() is called 2-4x per request in endpoints like /actions and /ai/ask; cheap for a 47-person demo but a per-request cache would remove duplicate mongo round-trips.",
+    "requested_person_ids caps at 3 but scored_people() is O(N*E) per request; fine for 47 people, not for larger orgs.",
+    "AI streaming: if EMERGENT_LLM_KEY is set but LlmChat.stream_message raises after already yielding a chunk, the fallback is skipped and the user gets a truncated briefing. Consider tracking chunk count and appending fallback tail on failure.",
+    "seed_organization() rewrites everything except source='import' on every backend restart; mitigation_actions.status is protected via $setOnInsert (good), but knowledge_overrides + shared_scenarios + scenario_runs + ai_messages are NEVER cleaned - unbounded growth in demo DB.",
+    "AskRequest.question min_length=3 is enforced by pydantic (422), but frontend does not surface that validation error - just fails silently at streamPost when body is <3 chars.",
+    "SharedScenario.jsx uses raw axios instead of the shared api client - fine because it's the only unauthenticated endpoint, but be aware localStorage token would still be sent by the shared client; keeping it separate is intentional.",
+    "MITIGATION_ACTIONS titles/rationale in seed_data.py are still English (see design issue above)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py"
+  ],
+  "success_rate": {"backend": "100% (37/37)", "frontend": "100% (all critical flows)"},
+  "test_credentials": "Magic-link demo: demo@northstar.example (POST /api/auth/request-link -> demo_token -> /api/auth/verify -> session_token). SESSION_KEY in localStorage is 'kontinum_session'.",
+  "seed_data_creation": "Backend pytest imports one TEST_Alice Example person via /api/import/people (cleanup: deleted at teardown along with knowledge_overrides). All action toggles reverted, knowledge_overrides collection emptied at the end. Verified Sarah=87 and org current_score=64 after cleanup.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend pytest at /app/backend/tests/backend_test.py MUST be run with `-n 0` to override the pytest.ini xdist config, otherwise TestKnowledge (which mutates knowledge_overrides and therefore Sarah's score) races with TestPeople on separate workers and Sarah reads as 86 instead of 87. Command: `python -m pytest backend/tests/backend_test.py -n 0 -v`. Utility helper `_mongo_cleanup()` in the file wipes knowledge_overrides + source='import' people between tests. Frontend uses SESSION_KEY 'kontinum_session' (not 'continuum_session'). Public share route is /bagikan/{token} (Bahasa Indonesia path). AI endpoints are SSE - use requests.iter_lines with stream=True and 60-90s timeout. The 4th-person toast fires but disappears fast (>=1s); the Playwright test used a wider poll window. Only remaining functional-ish gap is that mitigation action titles/rationale in seed_data.py are still in English (design_issues section)."
+}

@@ -9,9 +9,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field
 
+import ai
 import engine
 import seed_data
 
@@ -21,12 +23,13 @@ load_dotenv(ROOT_DIR / ".env")
 client = AsyncIOMotorClient(os.environ["MONGO_URL"])
 db = client[os.environ["DB_NAME"]]
 
-app = FastAPI(title="Continuum API")
+app = FastAPI(title="Kontinum API")
 api = APIRouter(prefix="/api")
 
 COLLECTIONS = ("people", "processes", "clients", "vendors", "systems", "knowledge_items")
 MAGIC_LINK_TTL_MINUTES = 15
 SESSION_TTL_DAYS = 7
+KNOWLEDGE_CAPTURE_GAIN = 25
 
 
 def now_iso() -> str:
@@ -109,7 +112,18 @@ class VerifyRequest(BaseModel):
 
 class SimulationRequest(BaseModel):
     person_id: str = "sarah-mitchell"
+    person_ids: list[str] | None = None
     duration_days: int = Field(default=90, ge=1, le=3650)
+
+
+class AskRequest(BaseModel):
+    question: str = Field(min_length=3, max_length=400)
+    person_id: str | None = None
+    session_id: str = Field(default="kontinum-demo")
+
+
+class CaptureRequest(BaseModel):
+    answers: list[str] = Field(min_length=1)
 
 
 class ActionUpdate(BaseModel):
@@ -124,12 +138,12 @@ async def current_session(
         token = authorization.split(" ", 1)[1].strip()
     token = token or request.cookies.get("continuum_session")
     if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        raise HTTPException(status_code=401, detail="Belum masuk")
     session = await db.sessions.find_one(
         {"token_hash": hash_token(token), "expires_at": {"$gt": now_iso()}}, {"_id": 0}
     )
     if not session:
-        raise HTTPException(status_code=401, detail="Your session has expired. Sign in again.")
+        raise HTTPException(status_code=401, detail="Sesi kamu sudah berakhir. Masuk kembali ya.")
     return session
 
 
@@ -145,6 +159,21 @@ async def load_graph(org_id: str) -> dict:
         "knowledge": await db.knowledge_items.find(query, projection).to_list(500),
         "process_dependencies": await db.process_dependencies.find(query, projection).to_list(200),
     }
+    overrides = {
+        row["knowledge_id"]: row
+        for row in await db.knowledge_overrides.find(query, projection).to_list(500)
+    }
+    if overrides:
+        graph["knowledge"] = [
+            {
+                **item,
+                "coverage_score": overrides[item["id"]]["coverage_score"],
+                "status": overrides[item["id"]]["status"],
+                "captured_at": overrides[item["id"]]["captured_at"],
+            }
+            if item["id"] in overrides else item
+            for item in graph["knowledge"]
+        ]
     return graph
 
 
@@ -195,7 +224,7 @@ async def request_link(payload: LinkRequest):
     window_start = (datetime.now(timezone.utc) - timedelta(minutes=MAGIC_LINK_TTL_MINUTES)).isoformat()
     recent = await db.magic_links.count_documents({"email": email, "created_at": {"$gt": window_start}})
     if recent >= 25:
-        raise HTTPException(status_code=429, detail="Too many sign-in links requested. Try again in a few minutes.")
+        raise HTTPException(status_code=429, detail="Terlalu banyak permintaan tautan masuk. Coba lagi beberapa menit.")
     await db.magic_links.insert_one({
         "email": email,
         "token_hash": hash_token(raw_token),
@@ -204,7 +233,7 @@ async def request_link(payload: LinkRequest):
         "created_at": now_iso(),
     })
     return {
-        "message": f"Sign-in link ready for {email}",
+        "message": f"Tautan masuk siap untuk {email}",
         "expires_in_minutes": MAGIC_LINK_TTL_MINUTES,
         "delivery": "demo",
         "demo_token": raw_token,
@@ -218,10 +247,10 @@ async def verify_link(payload: VerifyRequest):
         {"$set": {"used": True, "used_at": now_iso()}},
     )
     if not link:
-        raise HTTPException(status_code=400, detail="This sign-in link is invalid or has expired.")
+        raise HTTPException(status_code=400, detail="Tautan masuk ini tidak berlaku atau sudah kedaluwarsa.")
     user = await db.users.find_one({"email": link["email"]}, {"_id": 0})
     if not user:
-        raise HTTPException(status_code=400, detail="No account is linked to this address.")
+        raise HTTPException(status_code=400, detail="Tidak ada akun yang terhubung ke alamat ini.")
     session_token = secrets.token_urlsafe(32)
     await db.sessions.insert_one({
         "token_hash": hash_token(session_token),
@@ -278,7 +307,7 @@ async def overview(session: dict = Depends(current_session)):
         "critical_knowledge": critical_knowledge,
         "trend": [
             {"label": "Baseline", "value": score["baseline_score"]},
-            {"label": "Current", "value": score["current_score"]},
+            {"label": "Sekarang", "value": score["current_score"]},
             {"label": "Target", "value": score["target_score"]},
         ],
     }
@@ -307,7 +336,7 @@ async def person_detail(person_id: str, session: dict = Depends(current_session)
     graph = await load_graph(org_id)
     person = next((p for p in graph["people"] if p["id"] == person_id), None)
     if not person:
-        raise HTTPException(status_code=404, detail="We could not find that person in this workspace.")
+        raise HTTPException(status_code=404, detail="Orang itu tidak ditemukan di workspace ini.")
     footprint = engine.person_footprint(person_id, graph)
     scored = engine.score_person(footprint)
     findings = engine.build_findings(person, footprint)
@@ -342,23 +371,23 @@ async def person_detail(person_id: str, session: dict = Depends(current_session)
         "actions": actions,
         "evidence": [
             {
-                "label": f"{len(footprint['unbacked_critical_processes'])} critical processes without backup",
-                "source": "process ownership records",
+                "label": f"{len(footprint['unbacked_critical_processes'])} proses kritis tanpa backup",
+                "source": "catatan kepemilikan proses",
                 "confidence": 0.96,
             },
             {
-                "label": f"{len(footprint['clients'])} client relationships owned",
-                "source": "client ownership records",
+                "label": f"{len(footprint['clients'])} relasi klien yang dipegang",
+                "source": "catatan kepemilikan klien",
                 "confidence": 0.99,
             },
             {
-                "label": f"{footprint['knowledge_coverage']}% knowledge documented",
-                "source": "knowledge coverage assessment",
+                "label": f"{footprint['knowledge_coverage']}% pengetahuan terdokumentasi",
+                "source": "penilaian cakupan pengetahuan",
                 "confidence": 0.88,
             },
             {
-                "label": f"{footprint['trained_backups']} fully trained backups",
-                "source": "backup ownership records",
+                "label": f"{footprint['trained_backups']} backup terlatih",
+                "source": "catatan kepemilikan backup",
                 "confidence": 0.94,
             },
         ],
@@ -370,24 +399,24 @@ async def insights(person_id: str, session: dict = Depends(current_session)):
     graph = await load_graph(session["organization_id"])
     person = next((p for p in graph["people"] if p["id"] == person_id), None)
     if not person:
-        raise HTTPException(status_code=404, detail="We could not find that person in this workspace.")
+        raise HTTPException(status_code=404, detail="Orang itu tidak ditemukan di workspace ini.")
     footprint = engine.person_footprint(person_id, graph)
     gaps = sorted(footprint["knowledge_gaps"], key=lambda k: k["coverage_score"])
     lines = [
-        f"{person['name']} is the single operating owner for "
-        f"{len(footprint['unbacked_critical_processes'])} critical processes and "
-        f"{len(footprint['clients'])} client relationships.",
-        f"Documented knowledge sits at {footprint['knowledge_coverage']}%, so decisions in "
-        f"{len(gaps)} areas currently rely on personal judgment.",
-        "The exposure is a system design issue: work has concentrated where no backup ownership was defined.",
+        f"{person['name']} menjadi satu-satunya pemilik operasional untuk "
+        f"{len(footprint['unbacked_critical_processes'])} proses kritis dan "
+        f"{len(footprint['clients'])} relasi klien.",
+        f"Cakupan dokumentasi ada di {footprint['knowledge_coverage']}%, sehingga keputusan pada "
+        f"{len(gaps)} area masih bergantung pada pertimbangan pribadi.",
+        "Ini isu desain sistem: pekerjaan menumpuk di titik yang belum punya kepemilikan backup.",
     ]
     return {
         "person_id": person_id,
         "summary": lines,
-        "derivation": "Generated from the organizational graph — no inference beyond recorded evidence.",
+        "derivation": "Diturunkan dari graf organisasi — tanpa kesimpulan di luar bukti yang tercatat.",
         "confidence": 0.88,
         "evidence": [
-            {"label": g["title"], "value": f"{g['coverage_score']}% coverage", "confidence": g["confidence"]}
+            {"label": g["title"], "value": f"cakupan {g['coverage_score']}%", "confidence": g["confidence"]}
             for g in gaps[:4]
         ],
     }
@@ -404,7 +433,7 @@ async def dependencies(
     people = scored_people(graph)
     focus_person = next((p for p in people if p["id"] == focus), None)
     if not focus_person:
-        raise HTTPException(status_code=404, detail="We could not find that person in this workspace.")
+        raise HTTPException(status_code=404, detail="Orang itu tidak ditemukan di workspace ini.")
     footprint = engine.person_footprint(focus_person["id"], graph)
     nodes = [{
         "id": focus_person["id"],
@@ -433,14 +462,14 @@ async def dependencies(
 
     for process in footprint["processes"]:
         add(process, "process", process["criticality"],
-            f"{process['documentation_status']} documentation", "PERFORMS")
+            f"dokumentasi {process['documentation_status']}", "PERFORMS")
     for c in footprint["clients"]:
-        add(c, "client", c["criticality"], f"${c['annual_revenue']:,} annual", "SERVES")
+        add(c, "client", c["criticality"], f"${c['annual_revenue']:,} / tahun", "SERVES")
     for v in footprint["vendors"]:
         add(v, "vendor", v["criticality"], v["category"], "MANAGES")
     for s in footprint["systems"]:
         add(s, "system", s["criticality"],
-            "Sole administrator" if not s["secondary_admin_id"] else "Secondary admin in place", "ADMINISTERS")
+            "Administrator tunggal" if not s["secondary_admin_id"] else "Sudah ada admin kedua", "ADMINISTERS")
     for k in footprint["knowledge"]:
         add(k, "knowledge", k["criticality"], f"{k['coverage_score']}% documented", "KNOWS")
     for edge in graph["process_dependencies"]:
@@ -456,7 +485,7 @@ async def dependencies(
                 "label": downstream["name"],
                 "kind": "process",
                 "risk": downstream["criticality"],
-                "meta": "Downstream process",
+                "meta": "Proses turunan",
             })
         edges.append({
             "source": upstream["id"],
@@ -480,34 +509,238 @@ async def dependencies(
     }
 
 
+async def run_simulation(org_id: str, person_ids: list[str], duration_days: int) -> dict:
+    graph = await load_graph(org_id)
+    people = [p for pid in person_ids for p in graph["people"] if p["id"] == pid]
+    if len(people) != len(person_ids):
+        raise HTTPException(status_code=404, detail="Ada orang yang tidak ditemukan di workspace ini.")
+    actions = await load_actions(org_id)
+    result = engine.simulate_absence(people, graph, duration_days, actions)
+    return result
+
+
+def requested_person_ids(payload: SimulationRequest) -> list[str]:
+    ids = payload.person_ids or [payload.person_id]
+    unique = list(dict.fromkeys(pid for pid in ids if pid))
+    if not unique:
+        raise HTTPException(status_code=400, detail="Pilih minimal satu orang untuk disimulasikan.")
+    if len(unique) > 3:
+        raise HTTPException(status_code=400, detail="Skenario gabungan maksimal tiga orang.")
+    return unique
+
+
 @api.post("/scenarios/simulate")
 async def simulate(payload: SimulationRequest, session: dict = Depends(current_session)):
     org_id = session["organization_id"]
-    graph = await load_graph(org_id)
-    person = next((p for p in graph["people"] if p["id"] == payload.person_id), None)
-    if not person:
-        raise HTTPException(status_code=404, detail="We could not find that person in this workspace.")
-    actions = await load_actions(org_id)
-    result = engine.simulate_absence(person, graph, payload.duration_days, actions)
-    record = {
-        "id": secrets.token_hex(8),
+    person_ids = requested_person_ids(payload)
+    result = await run_simulation(org_id, person_ids, payload.duration_days)
+    run_id = secrets.token_hex(8)
+    await db.scenario_runs.insert_one({
+        "id": run_id,
         "organization_id": org_id,
-        "person_id": person["id"],
-        "person_name": person["name"],
+        "person_ids": person_ids,
+        "person_name": " & ".join(p["name"] for p in result["people"]),
         "duration_days": payload.duration_days,
         "baseline_score": result["baseline_score"],
         "simulated_score": result["simulated_score"],
         "mitigated_score": result["mitigated_score"],
+        "snapshot": result,
         "created_at": now_iso(),
+    })
+    return {**result, "run_id": run_id}
+
+
+@api.post("/scenarios/{run_id}/share")
+async def share_scenario(run_id: str, session: dict = Depends(current_session)):
+    run = await db.scenario_runs.find_one(
+        {"id": run_id, "organization_id": session["organization_id"]}, {"_id": 0}
+    )
+    if not run:
+        raise HTTPException(status_code=404, detail="Hasil simulasi itu tidak ditemukan.")
+    existing = await db.shared_scenarios.find_one({"run_id": run_id}, {"_id": 0})
+    token = existing["token"] if existing else secrets.token_urlsafe(12)
+    await db.shared_scenarios.update_one(
+        {"run_id": run_id},
+        {"$set": {
+            "run_id": run_id,
+            "token": token,
+            "organization_id": run["organization_id"],
+            "organization_name": seed_data.ORGANIZATION["name"],
+            "snapshot": run.get("snapshot"),
+            "shared_at": now_iso(),
+        }},
+        upsert=True,
+    )
+    return {"token": token, "path": f"/bagikan/{token}"}
+
+
+@api.get("/public/scenarios/{token}")
+async def public_scenario(token: str):
+    shared = await db.shared_scenarios.find_one({"token": token}, {"_id": 0})
+    if not shared or not shared.get("snapshot"):
+        raise HTTPException(status_code=404, detail="Tautan ini tidak berlaku atau sudah dicabut.")
+    return {
+        "organization_name": shared["organization_name"],
+        "shared_at": shared["shared_at"],
+        "result": shared["snapshot"],
     }
-    await db.scenario_runs.insert_one(dict(record))
-    return {**result, "run_id": record["id"]}
+
+
+def sse(text: str) -> str:
+    return "data: " + text.replace("\r", "").replace("\n", "\\n") + "\n\n"
+
+
+@api.post("/ai/briefing")
+async def ai_briefing(payload: SimulationRequest, session: dict = Depends(current_session)):
+    org_id = session["organization_id"]
+    person_ids = requested_person_ids(payload)
+    result = await run_simulation(org_id, person_ids, payload.duration_days)
+    graph = await load_graph(org_id)
+    org_score = engine.score_organization(graph, completed_uplift(await load_actions(org_id)))
+    facts = ai.scenario_facts(result, org_score)
+    fallback = ai.fallback_briefing(result)
+    prompt = f"DATA:\n{facts}\n\nTulis briefing eksekutifnya sekarang."
+
+    async def generator():
+        async for chunk in ai.stream_text(
+            f"briefing-{org_id}-{'-'.join(person_ids)}-{payload.duration_days}",
+            ai.BRIEFING_SYSTEM,
+            prompt,
+            fallback,
+        ):
+            yield sse(chunk)
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@api.post("/ai/ask")
+async def ai_ask(payload: AskRequest, session: dict = Depends(current_session)):
+    org_id = session["organization_id"]
+    graph = await load_graph(org_id)
+    actions = await load_actions(org_id)
+    org_score = engine.score_organization(graph, completed_uplift(actions))
+    people = scored_people(graph)
+    facts = ai.org_facts(graph, people, org_score)
+    question_lower = payload.question.lower()
+    focus_id = payload.person_id
+    if not focus_id:
+        focus_id = next((p["id"] for p in people if p["name"].split()[0].lower() in question_lower), None)
+    if focus_id:
+        person = next((p for p in graph["people"] if p["id"] == focus_id), None)
+        if person:
+            facts += "\n\n" + ai.person_facts(person, engine.person_footprint(focus_id, graph))
+    fallback = ai.fallback_answer(payload.question, facts)
+    prompt = f"DATA:\n{facts}\n\nPERTANYAAN: {payload.question}"
+    await db.ai_messages.insert_one({
+        "organization_id": org_id,
+        "session_id": payload.session_id,
+        "role": "user",
+        "content": payload.question,
+        "created_at": now_iso(),
+    })
+
+    async def generator():
+        collected = []
+        async for chunk in ai.stream_text(
+            f"ask-{org_id}-{payload.session_id}", ai.ASK_SYSTEM, prompt, fallback
+        ):
+            collected.append(chunk)
+            yield sse(chunk)
+        await db.ai_messages.insert_one({
+            "organization_id": org_id,
+            "session_id": payload.session_id,
+            "role": "assistant",
+            "content": "".join(collected),
+            "created_at": now_iso(),
+        })
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@api.get("/ai/history")
+async def ai_history(session_id: str = "kontinum-demo", session: dict = Depends(current_session)):
+    messages = await db.ai_messages.find(
+        {"organization_id": session["organization_id"], "session_id": session_id}, {"_id": 0}
+    ).sort("created_at", 1).to_list(50)
+    return {"session_id": session_id, "messages": messages}
+
+
+@api.get("/knowledge/{knowledge_id}/interview")
+async def knowledge_interview(knowledge_id: str, session: dict = Depends(current_session)):
+    graph = await load_graph(session["organization_id"])
+    item = next((k for k in graph["knowledge"] if k["id"] == knowledge_id), None)
+    if not item:
+        raise HTTPException(status_code=404, detail="Area pengetahuan itu tidak ditemukan.")
+    return {
+        "knowledge": item,
+        "questions": ai.interview_questions(item),
+        "coverage_gain": KNOWLEDGE_CAPTURE_GAIN,
+        "note": "Jawaban singkat sudah cukup — yang penting keputusannya bisa diulang orang lain.",
+    }
+
+
+@api.post("/knowledge/{knowledge_id}/capture")
+async def capture_knowledge(
+    knowledge_id: str, payload: CaptureRequest, session: dict = Depends(current_session)
+):
+    org_id = session["organization_id"]
+    graph = await load_graph(org_id)
+    item = next((k for k in graph["knowledge"] if k["id"] == knowledge_id), None)
+    if not item:
+        raise HTTPException(status_code=404, detail="Area pengetahuan itu tidak ditemukan.")
+    answered = [a.strip() for a in payload.answers if a and a.strip()]
+    if not answered:
+        raise HTTPException(status_code=400, detail="Isi minimal satu jawaban sebelum menyimpan.")
+    questions = ai.interview_questions(item)
+    gain = round(KNOWLEDGE_CAPTURE_GAIN * min(1, len(answered) / len(questions)))
+    coverage = min(95, item["coverage_score"] + gain)
+    status = "Documented" if coverage >= 80 else "Partial"
+    await db.knowledge_overrides.update_one(
+        {"organization_id": org_id, "knowledge_id": knowledge_id},
+        {"$set": {
+            "organization_id": org_id,
+            "knowledge_id": knowledge_id,
+            "coverage_score": coverage,
+            "status": status,
+            "answers": answered,
+            "captured_at": now_iso(),
+        }},
+        upsert=True,
+    )
+    graph = await load_graph(org_id)
+    score = engine.score_organization(graph, completed_uplift(await load_actions(org_id)))
+    person_id = item["primary_person_id"]
+    footprint = engine.person_footprint(person_id, graph)
+    person_score = engine.score_person(footprint)
+    return {
+        "knowledge_id": knowledge_id,
+        "coverage_score": coverage,
+        "coverage_gain": coverage - item["coverage_score"],
+        "status": status,
+        "score": score,
+        "person": {
+            "id": person_id,
+            "dependency_score": person_score["score"],
+            "tier": person_score["tier"],
+            "knowledge_coverage": footprint["knowledge_coverage"],
+        },
+    }
 
 
 @api.get("/scenarios")
 async def scenario_history(session: dict = Depends(current_session)):
     runs = await db.scenario_runs.find(
-        {"organization_id": session["organization_id"]}, {"_id": 0}
+        {"organization_id": session["organization_id"]}, {"_id": 0, "snapshot": 0}
     ).sort("created_at", -1).to_list(10)
     return {"runs": runs}
 
@@ -554,7 +787,7 @@ async def update_action(
         }},
     )
     if not updated:
-        raise HTTPException(status_code=404, detail="That action is not in this workspace.")
+        raise HTTPException(status_code=404, detail="Aksi itu tidak ada di workspace ini.")
     graph = await load_graph(org_id)
     actions = await load_actions(org_id)
     score = engine.score_organization(graph, completed_uplift(actions))
@@ -606,12 +839,12 @@ async def search(q: str = "", session: dict = Depends(current_session)):
 async def import_people(file: UploadFile = File(...), session: dict = Depends(current_session)):
     org_id = session["organization_id"]
     if not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Upload a .csv file exported from your HR system.")
+        raise HTTPException(status_code=400, detail="Unggah berkas .csv hasil ekspor sistem HR kamu.")
     raw = (await file.read()).decode("utf-8-sig", errors="ignore")
     reader = csv.DictReader(io.StringIO(raw))
     required = {"name", "role", "team"}
     if not reader.fieldnames or not required.issubset({f.strip().lower() for f in reader.fieldnames}):
-        raise HTTPException(status_code=400, detail="CSV needs at least name, role and team columns.")
+        raise HTTPException(status_code=400, detail="CSV minimal harus punya kolom name, role, dan team.")
     imported, skipped = 0, 0
     for row in reader:
         clean = {k.strip().lower(): (v or "").strip() for k, v in row.items() if k}
@@ -625,9 +858,9 @@ async def import_people(file: UploadFile = File(...), session: dict = Depends(cu
                 "id": person_id,
                 "organization_id": org_id,
                 "name": clean["name"],
-                "role": clean.get("role") or "Unassigned",
-                "team": clean.get("team") or "Unassigned",
-                "manager": clean.get("manager") or "Unassigned",
+                "role": clean.get("role") or "Belum ditentukan",
+                "team": clean.get("team") or "Belum ditentukan",
+                "manager": clean.get("manager") or "Belum ditentukan",
                 "tenure": clean.get("tenure") or "—",
                 "email": clean.get("email") or f"{person_id}@northstar.example",
                 "location": clean.get("location") or "—",
@@ -638,7 +871,7 @@ async def import_people(file: UploadFile = File(...), session: dict = Depends(cu
             upsert=True,
         )
         imported += 1
-    return {"imported": imported, "skipped": skipped, "message": f"{imported} people imported"}
+    return {"imported": imported, "skipped": skipped, "message": f"{imported} orang berhasil diimpor"}
 
 
 app.include_router(api)

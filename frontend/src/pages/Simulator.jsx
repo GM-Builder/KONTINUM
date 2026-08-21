@@ -1,45 +1,17 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Check } from "lucide-react";
-import { api, DURATIONS, messageFor, money } from "@/api";
-import {
-  ErrorState, EvidenceChip, LoadingState, Metric, SectionHeading, StatusBadge,
-} from "@/components/primitives";
-
-function ScoreJourney({ result }) {
-  return (
-    <section className="score-journey panel" data-testid="score-journey">
-      <SectionHeading eyebrow="RESILIENCE JOURNEY" title="From exposure to action" action={<span className="mono">CONFIDENCE {Math.round(result.confidence * 100)}%</span>} />
-      <div className="journey-values">
-        <div data-testid="journey-baseline">
-          <span>BASELINE</span>
-          <strong>{result.baseline_score}</strong>
-        </div>
-        <ArrowRight size={18} />
-        <div className="exposed" data-testid="journey-absence">
-          <span>DURING ABSENCE</span>
-          <strong>{result.simulated_score}</strong>
-        </div>
-        <ArrowRight size={18} />
-        <div className="improved" data-testid="journey-mitigated">
-          <span>AFTER MITIGATION</span>
-          <strong>{result.mitigated_score}</strong>
-        </div>
-      </div>
-      <p className="journey-note">
-        The {result.score_drop}-point drop is concentrated in process continuity and backup ownership.
-        Completing the recovery plan lifts the scenario to {result.mitigated_score}.
-      </p>
-    </section>
-  );
-}
+import { ArrowLeft, ArrowRight, Link2, Printer, Sparkles } from "lucide-react";
+import { toast } from "sonner";
+import { api, DURATIONS, messageFor, streamPost } from "@/api";
+import { ErrorState, LoadingState, SectionHeading, StatusBadge } from "@/components/primitives";
+import { ScenarioResult } from "@/components/ScenarioResult";
 
 function Comparison({ runs, active }) {
   const entries = DURATIONS.filter((option) => runs[option.days]);
   if (entries.length < 2) return null;
   return (
     <section className="panel comparison" data-testid="scenario-comparison">
-      <SectionHeading eyebrow="SCENARIO COMPARISON" title="Duration changes the damage" />
+      <SectionHeading eyebrow="PERBANDINGAN SKENARIO" title="Durasi mengubah besarnya kerusakan" />
       <div className="comparison-grid">
         {entries.map((option) => {
           const run = runs[option.days];
@@ -54,7 +26,7 @@ function Comparison({ runs, active }) {
                 <i style={{ height: `${run.simulated_score}%` }} />
               </div>
               <strong>{run.simulated_score}</strong>
-              <small>mitigated {run.mitigated_score}</small>
+              <small>mitigasi {run.mitigated_score}</small>
             </div>
           );
         })}
@@ -66,29 +38,55 @@ function Comparison({ runs, active }) {
 export default function Simulator() {
   const { personId = "sarah-mitchell" } = useParams();
   const [duration, setDuration] = useState(90);
+  const [selected, setSelected] = useState([personId]);
+  const [people, setPeople] = useState([]);
   const [result, setResult] = useState(null);
   const [runs, setRuns] = useState({});
   const [busy, setBusy] = useState(false);
   const [comparing, setComparing] = useState(false);
+  const [briefing, setBriefing] = useState("");
+  const [briefingBusy, setBriefingBusy] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
   const [error, setError] = useState("");
-  const [person, setPerson] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     setResult(null);
     setRuns({});
+    setBriefing("");
+    setShareUrl("");
+    setSelected([personId]);
     api
-      .get(`/people/${personId}`)
-      .then((response) => setPerson(response.data.person))
+      .get("/people")
+      .then((response) => setPeople(response.data.people.slice(0, 6)))
       .catch((err) => setError(messageFor(err)));
   }, [personId]);
+
+  const toggle = (id) => {
+    setSelected((previous) => {
+      if (previous.includes(id)) {
+        return previous.length === 1 ? previous : previous.filter((item) => item !== id);
+      }
+      if (previous.length >= 3) {
+        toast.info("Skenario gabungan maksimal tiga orang");
+        return previous;
+      }
+      return [...previous, id];
+    });
+    setResult(null);
+    setRuns({});
+    setBriefing("");
+    setShareUrl("");
+  };
 
   const run = async (days = duration) => {
     setBusy(true);
     setError("");
+    setBriefing("");
+    setShareUrl("");
     try {
       const response = await api.post("/scenarios/simulate", {
-        person_id: personId,
+        person_ids: selected,
         duration_days: days,
       });
       setResult(response.data);
@@ -104,7 +102,7 @@ export default function Simulator() {
     try {
       const responses = await Promise.all(
         DURATIONS.map((option) =>
-          api.post("/scenarios/simulate", { person_id: personId, duration_days: option.days }),
+          api.post("/scenarios/simulate", { person_ids: selected, duration_days: option.days }),
         ),
       );
       const next = {};
@@ -119,31 +117,86 @@ export default function Simulator() {
     setComparing(false);
   };
 
-  if (error && !person) return <ErrorState message={error} onRetry={() => navigate("/people")} />;
-  if (!person) return <LoadingState label="Loading dependency footprint…" />;
+  const makeBriefing = async () => {
+    setBriefingBusy(true);
+    setBriefing("");
+    try {
+      await streamPost(
+        "/ai/briefing",
+        { person_ids: selected, duration_days: result.duration_days },
+        (chunk) => setBriefing((previous) => previous + chunk),
+      );
+    } catch (err) {
+      toast.error("Briefing AI tidak tersedia", { description: err.message });
+    }
+    setBriefingBusy(false);
+  };
+
+  const share = async () => {
+    try {
+      const response = await api.post(`/scenarios/${result.run_id}/share`);
+      const url = `${window.location.origin}${response.data.path}`;
+      setShareUrl(url);
+      try {
+        await navigator.clipboard.writeText(url);
+        toast.success("Tautan bagi tersalin", { description: "Bisa dibuka tanpa login." });
+      } catch {
+        toast.success("Tautan bagi dibuat", { description: url });
+      }
+    } catch (err) {
+      toast.error("Gagal membuat tautan", { description: messageFor(err) });
+    }
+  };
+
+  if (error && people.length === 0) return <ErrorState message={error} onRetry={() => navigate("/people")} />;
+  if (people.length === 0) return <LoadingState label="Memuat jejak ketergantungan…" />;
+
+  const focusNames = selected
+    .map((id) => people.find((person) => person.id === id)?.name || id)
+    .join(" & ");
 
   return (
     <div className="page" data-testid="simulation-page">
       <button className="back-button" onClick={() => navigate(`/people/${personId}`)} data-testid="simulation-back-button">
-        <ArrowLeft size={14} /> {person.name}
+        <ArrowLeft size={14} /> {people.find((p) => p.id === personId)?.name || "Kembali"}
       </button>
 
       <div className="page-intro">
         <div>
-          <span className="eyebrow">ABSENCE SIMULATOR / COUNTERFACTUAL VIEW</span>
-          <h1>What happens if {person.name.split(" ")[0]} is unavailable?</h1>
-          <p>Estimated impact propagated through the dependency graph — not a prediction.</p>
+          <span className="eyebrow">SIMULATOR KETIDAKHADIRAN / TAMPILAN KONTRAFAKTUAL</span>
+          <h1>Apa yang terjadi jika {focusNames} tidak tersedia?</h1>
+          <p>Estimasi dampak yang dirambatkan melalui graf ketergantungan — bukan prediksi.</p>
         </div>
-        <StatusBadge tone="calm" testId="model-badge">Deterministic model</StatusBadge>
+        <StatusBadge tone="calm" testId="model-badge">Model deterministik</StatusBadge>
       </div>
 
       <section className="simulation-setup panel" data-testid="simulation-setup-panel">
         <div>
-          <span className="eyebrow">SCENARIO DURATION</span>
-          <h2>Choose the absence window</h2>
+          <span className="eyebrow">SIAPA YANG TIDAK TERSEDIA</span>
+          <h2>Pilih satu orang atau skenario gabungan</h2>
           <p className="muted">
-            Longer windows compound the damage: unbacked work queues, client context decays and
-            undocumented decisions stall.
+            Pilih sampai tiga orang untuk melihat dampak gabungan bila mereka absen di periode yang sama.
+          </p>
+        </div>
+        <div className="person-picker" data-testid="person-picker">
+          {people.map((person) => (
+            <button
+              key={person.id}
+              className={selected.includes(person.id) ? "active" : ""}
+              onClick={() => toggle(person.id)}
+              data-testid={`scenario-person-${person.id}-button`}
+            >
+              {person.name} <b>{person.dependency_score}</b>
+            </button>
+          ))}
+        </div>
+
+        <div>
+          <span className="eyebrow">DURASI SKENARIO</span>
+          <h2>Pilih jendela ketidakhadiran</h2>
+          <p className="muted">
+            Semakin panjang, semakin menumpuk: pekerjaan tanpa backup mengantre, konteks klien pudar,
+            dan keputusan tak terdokumentasi terhenti.
           </p>
         </div>
         <div className="duration-selector">
@@ -155,17 +208,17 @@ export default function Simulator() {
               data-testid={`simulation-duration-${option.label.toLowerCase().replace(" ", "-")}-button`}
             >
               {option.label}
-              <span>{option.days === 90 ? "Demo path" : ""}</span>
+              <span>{option.days === 90 ? "Jalur demo" : ""}</span>
             </button>
           ))}
         </div>
         <div className="simulation-buttons">
           <button className="primary-button" onClick={() => run()} disabled={busy} data-testid="run-simulation-button">
-            {busy ? "Propagating dependency impact…" : "Run simulation"}
+            {busy ? "Merambatkan dampak…" : "Jalankan simulasi"}
             <ArrowRight size={16} />
           </button>
           <button className="secondary-button" onClick={compareAll} disabled={comparing} data-testid="compare-all-durations-button">
-            {comparing ? "Comparing…" : "Compare all durations"}
+            {comparing ? "Membandingkan…" : "Bandingkan semua durasi"}
           </button>
         </div>
       </section>
@@ -173,108 +226,51 @@ export default function Simulator() {
       {error ? <ErrorState message={error} onRetry={() => run()} /> : null}
 
       {result ? (
-        <div className="result-view" data-testid="simulation-result-view">
-          <section className="result-head panel">
+        <>
+          <div className="export-bar" data-testid="export-bar">
             <div>
-              <span className="eyebrow">{result.duration_label.toUpperCase()} ABSENCE SIMULATION</span>
-              <h2>
-                {result.person.name} unavailable for {result.duration_label.toLowerCase()}
-              </h2>
-              <p>Estimated organizational impact based on the dependencies recorded today.</p>
+              <span className="eyebrow">EKSPOR DEWAN</span>
+              <p className="muted">Bawa satu halaman ini ke rapat: cetak jadi PDF atau bagikan tautannya.</p>
             </div>
-            <div className="confidence">
-              <span>SIMULATION CONFIDENCE</span>
-              <strong>{Math.round(result.confidence * 100)}%</strong>
-              <small>estimated · evidence-backed</small>
-            </div>
-          </section>
-
-          <div className="metric-grid result-metrics">
-            <Metric label="Processes affected" value={result.counts.processes} note="Direct and downstream" tone="danger-text" testId="metric-processes-affected" />
-            <Metric label="Clients at risk" value={result.counts.clients} note={money(result.revenue_at_risk)} tone="warning-text" testId="metric-clients-at-risk" />
-            <Metric label="Knowledge gaps" value={result.counts.knowledge_gaps} note="Below 70% coverage" testId="metric-knowledge-gaps" />
-            <Metric label="Critical findings" value={result.counts.critical_findings} note="Review recommended" tone="danger-text" testId="metric-critical-findings" />
-          </div>
-
-          <ScoreJourney result={result} />
-          <Comparison runs={runs} active={result.duration_days} />
-
-          <div className="result-grid">
-            <section className="panel findings">
-              <SectionHeading eyebrow="PROPAGATED IMPACT" title="What changes downstream" />
-              {result.findings.map((finding, index) => (
-                <div className="finding" key={finding.id} data-testid={`simulation-finding-${finding.id}`}>
-                  <span className="finding-number">0{index + 1}</span>
-                  <div>
-                    <StatusBadge>{finding.severity}</StatusBadge>
-                    <h3>{finding.title}</h3>
-                    <p>{finding.explanation}</p>
-                    <EvidenceChip confidence={finding.confidence}>
-                      {finding.evidence} · {finding.references} refs
-                    </EvidenceChip>
-                  </div>
-                </div>
-              ))}
-              <div className="manual-block">
-                <h3>Affected processes</h3>
-                {result.affected_processes.map((process) => (
-                  <div className="list-line" key={process.id} data-testid={`affected-process-${process.id}`}>
-                    <div>
-                      <b>{process.name}</b>
-                      <span>{process.reason}</span>
-                    </div>
-                    <StatusBadge>{process.impact}</StatusBadge>
-                    <StatusBadge>{process.criticality}</StatusBadge>
-                  </div>
-                ))}
-              </div>
-              <div className="manual-block">
-                <h3>Clients at risk</h3>
-                {result.clients_at_risk.map((client) => (
-                  <div className="list-line" key={client.id} data-testid={`at-risk-client-${client.id}`}>
-                    <div>
-                      <b>{client.name}</b>
-                      <span>{client.reason}</span>
-                    </div>
-                    <span className="mono">{money(client.annual_revenue)}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="assumptions">
-                <span className="eyebrow">ASSUMPTIONS</span>
-                {result.assumptions.map((assumption) => (
-                  <p key={assumption}>
-                    <Check size={14} /> {assumption}
-                  </p>
-                ))}
-              </div>
-            </section>
-
-            <section className="panel recovery">
-              <SectionHeading eyebrow="ACTION CENTER" title="Recommended recovery plan" />
-              {result.recovery_plan.map((action) => (
-                <div className="action-preview" key={action.id} data-testid={`recovery-action-${action.id}`}>
-                  <span className="action-icon">
-                    <Check size={14} />
-                  </span>
-                  <div>
-                    <b>{action.title}</b>
-                    <small>
-                      {action.type} · {action.effort} effort
-                    </small>
-                  </div>
-                  <strong>+{action.scenario_reduction}</strong>
-                </div>
-              ))}
-              {result.recovery_plan.length === 0 ? (
-                <p className="muted">No recovery actions are queued for this person yet.</p>
-              ) : null}
-              <button className="primary-button full-button" onClick={() => navigate("/actions")} data-testid="open-action-center-button">
-                Open action center <ArrowRight size={15} />
+            <div className="export-actions">
+              <button className="secondary-button" onClick={() => window.print()} data-testid="print-scenario-button">
+                <Printer size={15} /> Cetak / PDF
               </button>
-            </section>
+              <button className="secondary-button" onClick={share} data-testid="share-scenario-button">
+                <Link2 size={15} /> Buat tautan bagi
+              </button>
+              <button className="primary-button" onClick={makeBriefing} disabled={briefingBusy} data-testid="ai-briefing-button">
+                <Sparkles size={15} /> {briefingBusy ? "Menulis briefing…" : "Briefing AI"}
+              </button>
+            </div>
           </div>
-        </div>
+
+          {shareUrl ? (
+            <div className="share-link" data-testid="share-link">
+              <span className="mono">TAUTAN PUBLIK</span>
+              <a href={shareUrl} target="_blank" rel="noreferrer">
+                {shareUrl}
+              </a>
+            </div>
+          ) : null}
+
+          {briefing || briefingBusy ? (
+            <section className="panel briefing-panel" data-testid="ai-briefing-panel">
+              <SectionHeading
+                eyebrow="BRIEFING EKSEKUTIF · GEMINI 3 FLASH"
+                title="Naratif untuk dibacakan di rapat"
+                action={<span className="mono">DITURUNKAN DARI GRAF</span>}
+              />
+              <div className="briefing-text">{briefing || "Menyusun briefing…"}</div>
+              <p className="muted">
+                Ditulis hanya dari bukti pada graf organisasi. Angka dampak adalah estimasi, bukan prediksi.
+              </p>
+            </section>
+          ) : null}
+
+          <Comparison runs={runs} active={result.duration_days} />
+          <ScenarioResult result={result} onOpenActions={() => navigate("/actions")} />
+        </>
       ) : null}
     </div>
   );

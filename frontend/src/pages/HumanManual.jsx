@@ -1,12 +1,21 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Mic, Sparkles } from "lucide-react";
 import { api, messageFor, money } from "@/api";
 import {
   Bar, EmptyState, ErrorState, EvidenceChip, LoadingState, ScoreRing, SectionHeading, StatusBadge,
 } from "@/components/primitives";
+import { AskPanel } from "@/components/AskPanel";
+import { KnowledgeInterview } from "@/components/KnowledgeInterview";
 
-const TABS = ["overview", "knowledge", "relationships", "processes", "gaps", "evidence"];
+const TABS = [
+  ["overview", "Ringkasan"],
+  ["knowledge", "Pengetahuan"],
+  ["relationships", "Relasi"],
+  ["processes", "Proses"],
+  ["gaps", "Celah"],
+  ["evidence", "Bukti"],
+];
 
 export default function HumanManual() {
   const { personId } = useParams();
@@ -14,31 +23,38 @@ export default function HumanManual() {
   const [data, setData] = useState(null);
   const [insight, setInsight] = useState(null);
   const [error, setError] = useState("");
+  const [askOpen, setAskOpen] = useState(false);
+  const [interviewId, setInterviewId] = useState("");
   const navigate = useNavigate();
+
+  const load = () => {
+    api
+      .get(`/people/${personId}`)
+      .then((response) => setData(response.data))
+      .catch((err) => setError(messageFor(err)));
+  };
 
   useEffect(() => {
     setData(null);
     setError("");
     setTab("overview");
-    api
-      .get(`/people/${personId}`)
-      .then((response) => setData(response.data))
-      .catch((err) => setError(messageFor(err)));
+    load();
     api
       .get(`/insights/${personId}`)
       .then((response) => setInsight(response.data))
       .catch(() => setInsight(null));
-  }, [personId]);
+  }, [personId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (error) return <ErrorState message={error} onRetry={() => navigate("/people")} />;
-  if (!data) return <LoadingState label="Assembling the human manual…" />;
+  if (!data) return <LoadingState label="Menyusun Human Manual…" />;
 
   const { person, owns, knowledge, knowledge_gaps: gaps, findings, evidence, score_breakdown: breakdown, actions } = data;
+  const firstName = person.name.split(" ")[0];
 
   return (
     <div className="page" data-testid="human-manual-page">
-      <button className="back-button" onClick={() => navigate("/map?focus=" + person.id)} data-testid="human-manual-back-button">
-        <ArrowLeft size={14} /> Dependency map
+      <button className="back-button" onClick={() => navigate(`/map?focus=${person.id}`)} data-testid="human-manual-back-button">
+        <ArrowLeft size={14} /> Dependency Map
       </button>
 
       <div className="manual-header">
@@ -52,14 +68,14 @@ export default function HumanManual() {
             </p>
             <div className="manual-meta">
               <StatusBadge testId="manual-tier-badge">{person.tier}</StatusBadge>
-              <span className="mono">TENURE {person.tenure}</span>
-              <span className="mono">MANAGER {person.manager}</span>
-              <span className="mono">{money(person.revenue_at_risk)} REVENUE OWNED</span>
+              <span className="mono">MASA KERJA {person.tenure}</span>
+              <span className="mono">ATASAN {person.manager}</span>
+              <span className="mono">{money(person.revenue_at_risk)} PENDAPATAN DIPEGANG</span>
             </div>
           </div>
         </div>
         <div className="manual-cta">
-          <span className="eyebrow">DEPENDENCY RISK</span>
+          <span className="eyebrow">RISIKO KETERGANTUNGAN</span>
           <strong data-testid="manual-dependency-score">
             {person.dependency_score}
             <small>/100</small>
@@ -69,22 +85,25 @@ export default function HumanManual() {
             onClick={() => navigate(`/simulate/${person.id}`)}
             data-testid="human-manual-simulate-button"
           >
-            Simulate absence <ArrowRight size={15} />
+            Simulasikan ketidakhadiran <ArrowRight size={15} />
+          </button>
+          <button className="secondary-button" onClick={() => setAskOpen(true)} data-testid="manual-ask-button">
+            <Sparkles size={15} /> Apa saja yang bergantung pada {firstName}?
           </button>
         </div>
       </div>
 
       <div className="tabs" role="tablist">
-        {TABS.map((item) => (
+        {TABS.map(([id, label]) => (
           <button
-            key={item}
+            key={id}
             role="tab"
-            aria-selected={tab === item}
-            className={tab === item ? "active" : ""}
-            onClick={() => setTab(item)}
-            data-testid={`human-manual-tab-${item}-button`}
+            aria-selected={tab === id}
+            className={tab === id ? "active" : ""}
+            onClick={() => setTab(id)}
+            data-testid={`human-manual-tab-${id}-button`}
           >
-            {item}
+            {label}
           </button>
         ))}
       </div>
@@ -92,22 +111,22 @@ export default function HumanManual() {
       {tab === "overview" ? (
         <div className="manual-grid" data-testid="manual-tab-overview">
           <section className="panel">
-            <SectionHeading eyebrow="OPERATING KNOWLEDGE" title={`What ${person.name.split(" ")[0]} carries`} />
+            <SectionHeading eyebrow="PENGETAHUAN OPERASIONAL" title={`Apa yang dipikul ${firstName}`} />
             <div className="manual-block">
-              <h3>Owned processes</h3>
+              <h3>Proses yang dimiliki</h3>
               <div className="tag-list">
                 {owns.processes.map((process) => (
                   <span key={process.id} data-testid={`owned-process-${process.id}`}>
                     {process.name}
                   </span>
                 ))}
-                {owns.processes.length === 0 ? <span>No process ownership recorded</span> : null}
+                {owns.processes.length === 0 ? <span>Belum ada kepemilikan proses</span> : null}
               </div>
             </div>
             <div className="manual-block">
-              <h3>Score composition</h3>
+              <h3>Komposisi skor</h3>
               {breakdown.map((row) => (
-                <div className="breakdown-row" key={row.label} data-testid={`breakdown-${row.label.toLowerCase().replaceAll(" ", "-")}`}>
+                <div className="breakdown-row" key={row.label}>
                   <div>
                     <b>{row.label}</b>
                     <small>{row.detail}</small>
@@ -120,21 +139,21 @@ export default function HumanManual() {
 
           <section className="panel">
             <SectionHeading
-              eyebrow="TRANSFERABILITY"
-              title="Backup readiness"
-              action={<StatusBadge tone={person.trained_backups ? "calm" : "critical"}>{person.trained_backups ? "Partial" : "Needs action"}</StatusBadge>}
+              eyebrow="KETERALIHAN"
+              title="Kesiapan backup"
+              action={<StatusBadge tone={person.trained_backups ? "calm" : "critical"}>{person.trained_backups ? "Sebagian" : "Perlu tindakan"}</StatusBadge>}
             />
             <div className="readiness-number" data-testid="trained-backups-value">
-              {person.trained_backups} <small>fully trained backups</small>
+              {person.trained_backups} <small>backup terlatih penuh</small>
             </div>
             <p className="muted">
-              The organization is dependent on one person for high-impact workflows. This is a system design
-              signal — not a judgment about the person.
+              Organisasi bergantung pada satu orang untuk alur kerja berdampak tinggi. Ini sinyal
+              desain sistem — bukan penilaian atas orangnya.
             </p>
             {insight ? (
               <div className="insight-block" data-testid="insight-block">
                 <span className="eyebrow">
-                  <Sparkles size={12} /> DERIVED SUMMARY
+                  <Sparkles size={12} /> RINGKASAN TURUNAN
                 </span>
                 {insight.summary.map((line) => (
                   <p key={line}>{line}</p>
@@ -148,7 +167,14 @@ export default function HumanManual() {
 
       {tab === "knowledge" ? (
         <section className="panel tab-panel" data-testid="manual-tab-knowledge">
-          <SectionHeading eyebrow="KNOWLEDGE" title="Knowledge inventory" action={<span className="mono">{person.knowledge_coverage}% documented</span>} />
+          <SectionHeading
+            eyebrow="PENGETAHUAN"
+            title="Inventaris pengetahuan"
+            action={<span className="mono">{person.knowledge_coverage}% terdokumentasi</span>}
+          />
+          <p className="muted">
+            Rekam sesi wawancara singkat untuk menaikkan cakupan dokumentasi dan menghitung ulang skor.
+          </p>
           {knowledge.map((item) => (
             <div className="list-line" key={item.id} data-testid={`knowledge-item-${item.id}`}>
               <div>
@@ -158,23 +184,30 @@ export default function HumanManual() {
               <Bar value={item.coverage_score} tone={item.coverage_score < 50 ? "danger" : ""} />
               <StatusBadge>{item.status}</StatusBadge>
               <span className="mono">{item.coverage_score}%</span>
+              <button
+                className="secondary-button small-button"
+                onClick={() => setInterviewId(item.id)}
+                data-testid={`capture-knowledge-${item.id}-button`}
+              >
+                <Mic size={13} /> Rekam
+              </button>
             </div>
           ))}
-          {knowledge.length === 0 ? <EmptyState title="No knowledge recorded" body="Nothing has been captured for this person yet." /> : null}
+          {knowledge.length === 0 ? <EmptyState title="Belum ada pengetahuan tercatat" body="Belum ada yang direkam untuk orang ini." /> : null}
         </section>
       ) : null}
 
       {tab === "relationships" ? (
         <section className="panel tab-panel" data-testid="manual-tab-relationships">
-          <SectionHeading eyebrow="RELATIONSHIPS" title="Clients, vendors and systems" />
+          <SectionHeading eyebrow="RELASI" title="Klien, vendor, dan sistem" />
           {[
-            ["Clients", owns.clients, (row) => `${row.tier} · ${money(row.annual_revenue)}`],
-            ["Vendors", owns.vendors, (row) => row.category],
-            ["Systems", owns.systems, (row) => (row.secondary_admin ? `Secondary admin: ${row.secondary_admin}` : "Sole administrator")],
+            ["Klien", owns.clients, (row) => `${row.tier} · ${money(row.annual_revenue)}`],
+            ["Vendor", owns.vendors, (row) => row.category],
+            ["Sistem", owns.systems, (row) => (row.secondary_admin ? `Admin kedua: ${row.secondary_admin}` : "Administrator tunggal")],
           ].map(([label, rows, describe]) => (
             <div className="manual-block" key={label}>
               <h3>{label}</h3>
-              {rows.length === 0 ? <p className="muted">None recorded.</p> : null}
+              {rows.length === 0 ? <p className="muted">Tidak ada catatan.</p> : null}
               {rows.map((row) => (
                 <div className="list-line" key={row.id} data-testid={`relationship-${row.id}`}>
                   <div>
@@ -191,12 +224,12 @@ export default function HumanManual() {
 
       {tab === "processes" ? (
         <section className="panel tab-panel" data-testid="manual-tab-processes">
-          <SectionHeading eyebrow="PROCESSES" title="Ownership and continuity" />
+          <SectionHeading eyebrow="PROSES" title="Kepemilikan dan kelangsungan" />
           {owns.processes.map((process) => (
             <div className="list-line" key={process.id} data-testid={`process-line-${process.id}`}>
               <div>
                 <b>{process.name}</b>
-                <span>{process.backup_owner ? `Backup: ${process.backup_owner}` : "No validated backup owner"}</span>
+                <span>{process.backup_owner ? `Backup: ${process.backup_owner}` : "Belum ada backup owner tervalidasi"}</span>
               </div>
               <StatusBadge>{process.criticality}</StatusBadge>
               <StatusBadge>{process.documentation_status}</StatusBadge>
@@ -204,12 +237,12 @@ export default function HumanManual() {
           ))}
           {data.backs_up.length > 0 ? (
             <div className="manual-block">
-              <h3>Backs up for others</h3>
+              <h3>Menjadi backup untuk orang lain</h3>
               {data.backs_up.map((process) => (
                 <div className="list-line" key={process.id}>
                   <div>
                     <b>{process.name}</b>
-                    <span>Secondary owner</span>
+                    <span>Pemilik kedua</span>
                   </div>
                   <StatusBadge>{process.criticality}</StatusBadge>
                 </div>
@@ -221,7 +254,7 @@ export default function HumanManual() {
 
       {tab === "gaps" ? (
         <section className="panel tab-panel" data-testid="manual-tab-gaps">
-          <SectionHeading eyebrow="GAPS" title="Failure modes to close" action={<span className="mono">{gaps.length} gaps</span>} />
+          <SectionHeading eyebrow="CELAH" title="Mode kegagalan yang perlu ditutup" action={<span className="mono">{gaps.length} celah</span>} />
           {findings.map((finding, index) => (
             <div className="finding" key={finding.id} data-testid={`finding-${finding.id}`}>
               <span className="finding-number">0{index + 1}</span>
@@ -230,14 +263,14 @@ export default function HumanManual() {
                 <h3>{finding.title}</h3>
                 <p>{finding.explanation}</p>
                 <EvidenceChip confidence={finding.confidence}>
-                  {finding.evidence} · {finding.references} refs
+                  {finding.evidence} · {finding.references} rujukan
                 </EvidenceChip>
               </div>
             </div>
           ))}
           {actions.length > 0 ? (
             <div className="manual-block">
-              <h3>Linked recovery actions</h3>
+              <h3>Aksi pemulihan terkait</h3>
               {actions.map((action) => (
                 <div className="list-line" key={action.id} data-testid={`linked-action-${action.id}`}>
                   <div>
@@ -245,7 +278,7 @@ export default function HumanManual() {
                     <span>{action.type}</span>
                   </div>
                   <StatusBadge>{action.priority}</StatusBadge>
-                  <span className="mono">+{action.org_uplift} score</span>
+                  <span className="mono">+{action.org_uplift} skor</span>
                 </div>
               ))}
             </div>
@@ -255,21 +288,34 @@ export default function HumanManual() {
 
       {tab === "evidence" ? (
         <section className="panel tab-panel" data-testid="manual-tab-evidence">
-          <SectionHeading eyebrow="EVIDENCE" title="Every claim, traced to a record" />
+          <SectionHeading eyebrow="BUKTI" title="Setiap klaim punya jejak catatan" />
           {evidence.map((row) => (
-            <div className="list-line" key={row.label} data-testid={`evidence-row-${row.label.toLowerCase().replaceAll(" ", "-").replaceAll("%", "")}`}>
+            <div className="list-line" key={row.label}>
               <div>
                 <b>{row.label}</b>
                 <span>{row.source}</span>
               </div>
-              <EvidenceChip confidence={row.confidence}>confidence</EvidenceChip>
+              <EvidenceChip confidence={row.confidence}>keyakinan</EvidenceChip>
             </div>
           ))}
           <p className="muted">
-            Continuum shows what it can evidence. Anything inferred is labelled, and simulations are
-            estimates rather than predictions.
+            KONTINŪM hanya menampilkan yang bisa dibuktikan. Apa pun yang disimpulkan diberi label,
+            dan simulasi selalu disebut estimasi, bukan prediksi.
           </p>
         </section>
+      ) : null}
+
+      <AskPanel
+        open={askOpen}
+        onClose={() => setAskOpen(false)}
+        initialQuestion={`Apa saja yang bergantung pada ${person.name}?`}
+      />
+      {interviewId ? (
+        <KnowledgeInterview
+          knowledgeId={interviewId}
+          onClose={() => setInterviewId("")}
+          onCaptured={() => load()}
+        />
       ) : null}
     </div>
   );

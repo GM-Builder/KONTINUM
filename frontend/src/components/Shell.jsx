@@ -1,26 +1,27 @@
 import { useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
-  Activity, ChevronRight, CircleHelp, LayoutDashboard, ListChecks, LogOut,
-  Network, Search, Users, X,
+  Activity, ChevronRight, LayoutDashboard, ListChecks, LogOut,
+  Network, Search, Sparkles, Users, X,
 } from "lucide-react";
 import { api, SESSION_KEY } from "@/api";
+import { AskPanel } from "@/components/AskPanel";
 
 const NAV = [
-  { to: "/overview", label: "Overview", icon: LayoutDashboard, id: "overview" },
+  { to: "/overview", label: "Ringkasan", icon: LayoutDashboard, id: "overview" },
   { to: "/map", label: "Dependency Map", icon: Network, id: "map" },
-  { to: "/people", label: "People", icon: Users, id: "people" },
-  { to: "/simulate/sarah-mitchell", label: "Simulations", icon: Activity, id: "simulations" },
+  { to: "/people", label: "Orang", icon: Users, id: "people" },
+  { to: "/simulate/sarah-mitchell", label: "Simulasi", icon: Activity, id: "simulations" },
   { to: "/actions", label: "Action Center", icon: ListChecks, id: "actions" },
 ];
 
-const KIND_ROUTE = {
-  person: (id) => `/people/${id}`,
-  process: () => "/map",
-  client: () => "/map",
-  vendor: () => "/map",
-  system: () => "/map",
-  knowledge: () => "/map",
+const KIND_LABEL = {
+  person: "orang",
+  process: "proses",
+  client: "klien",
+  vendor: "vendor",
+  system: "sistem",
+  knowledge: "pengetahuan",
 };
 
 function SearchOverlay({ onClose }) {
@@ -48,13 +49,13 @@ function SearchOverlay({ onClose }) {
         <button className="icon-button close-button" onClick={onClose} data-testid="search-close-button">
           <X size={18} />
         </button>
-        <span className="eyebrow">GLOBAL QUERY</span>
-        <h2>Find a dependency</h2>
+        <span className="eyebrow">PENCARIAN GLOBAL</span>
+        <h2>Cari ketergantungan</h2>
         <input
           autoFocus
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search people, processes, clients, knowledge…"
+          placeholder="Cari orang, proses, klien, atau pengetahuan…"
           data-testid="global-search-input"
         />
         <div className="search-results" data-testid="search-results">
@@ -63,17 +64,17 @@ function SearchOverlay({ onClose }) {
               key={`${item.kind}-${item.id}`}
               onClick={() => {
                 onClose();
-                navigate((KIND_ROUTE[item.kind] || (() => "/overview"))(item.id));
+                navigate(item.kind === "person" ? `/people/${item.id}` : "/map");
               }}
               data-testid={`search-result-${item.id}`}
             >
-              <span className={`kind-tag kind-${item.kind}`}>{item.kind}</span>
+              <span className={`kind-tag kind-${item.kind}`}>{KIND_LABEL[item.kind] || item.kind}</span>
               <b>{item.label}</b>
               <small>{item.meta}</small>
             </button>
           ))}
           {query.trim().length >= 2 && results.length === 0 ? (
-            <p className="muted" data-testid="search-empty">No entity matches that query yet.</p>
+            <p className="muted" data-testid="search-empty">Belum ada entitas yang cocok.</p>
           ) : null}
         </div>
       </div>
@@ -83,13 +84,14 @@ function SearchOverlay({ onClose }) {
 
 export function Shell({ children, organization, user }) {
   const [searchOpen, setSearchOpen] = useState(false);
+  const [askOpen, setAskOpen] = useState(false);
   const navigate = useNavigate();
 
   const logout = async () => {
     try {
       await api.post("/auth/logout");
     } catch {
-      /* session already gone */
+      /* sesi sudah tidak ada */
     }
     localStorage.removeItem(SESSION_KEY);
     navigate("/login");
@@ -101,7 +103,10 @@ export function Shell({ children, organization, user }) {
         event.preventDefault();
         setSearchOpen(true);
       }
-      if (event.key === "Escape") setSearchOpen(false);
+      if (event.key === "Escape") {
+        setSearchOpen(false);
+        setAskOpen(false);
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -111,14 +116,14 @@ export function Shell({ children, organization, user }) {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark">C</span>
-          <span>CONTINUUM</span>
+          <span className="brand-mark">K</span>
+          <span>KONTINŪM</span>
         </div>
         <div className="org-switcher" data-testid="organization-switcher">
           <span className="org-dot" />
           <div>
             <b>{organization?.name || "Northstar Labs"}</b>
-            <small>{organization?.workspace || "Operations workspace"}</small>
+            <small>Workspace operasional</small>
           </div>
           <ChevronRight size={15} />
         </div>
@@ -136,11 +141,14 @@ export function Shell({ children, organization, user }) {
           ))}
         </nav>
         <div className="sidebar-bottom">
+          <button className="ask-trigger" onClick={() => setAskOpen(true)} data-testid="ask-open-button">
+            <Sparkles size={17} /> Tanya KONTINŪM
+          </button>
           <button onClick={() => setSearchOpen(true)} data-testid="global-search-button">
-            <Search size={17} /> Search <em>⌘K</em>
+            <Search size={17} /> Cari <em>⌘K</em>
           </button>
           <button onClick={logout} data-testid="logout-button">
-            <LogOut size={17} /> Sign out
+            <LogOut size={17} /> Keluar
           </button>
           <div className="user-chip" data-testid="user-chip">
             <span>{(user?.name || "Demo Operator").split(" ").map((p) => p[0]).join("").slice(0, 2)}</span>
@@ -154,12 +162,17 @@ export function Shell({ children, organization, user }) {
 
       <div className="mobile-header">
         <div className="brand">
-          <span className="brand-mark">C</span>
-          <span>CONTINUUM</span>
+          <span className="brand-mark">K</span>
+          <span>KONTINŪM</span>
         </div>
-        <button className="icon-button" onClick={() => setSearchOpen(true)} data-testid="mobile-search-button">
-          <Search size={18} />
-        </button>
+        <div className="mobile-actions">
+          <button className="icon-button" onClick={() => setAskOpen(true)} data-testid="mobile-ask-button">
+            <Sparkles size={18} />
+          </button>
+          <button className="icon-button" onClick={() => setSearchOpen(true)} data-testid="mobile-search-button">
+            <Search size={18} />
+          </button>
+        </div>
       </div>
 
       <main className="main-content">
@@ -169,17 +182,18 @@ export function Shell({ children, organization, user }) {
               {(organization?.name || "NORTHSTAR LABS").toUpperCase()} <ChevronRight size={13} /> RESILIENCE INTELLIGENCE
             </span>
             <p>
-              Deterministic model v1.0 <span className="live-dot" /> {organization?.counts?.employees || 47} people mapped
+              Model deterministik v1.0 <span className="live-dot" /> {organization?.counts?.employees || 47} orang terpetakan
             </p>
           </div>
-          <button className="icon-button" onClick={() => setSearchOpen(true)} data-testid="header-search-button">
-            <CircleHelp size={18} />
+          <button className="secondary-button ask-header-button" onClick={() => setAskOpen(true)} data-testid="header-ask-button">
+            <Sparkles size={15} /> Tanya KONTINŪM
           </button>
         </header>
         {children}
       </main>
 
       {searchOpen ? <SearchOverlay onClose={() => setSearchOpen(false)} /> : null}
+      <AskPanel open={askOpen} onClose={() => setAskOpen(false)} />
 
       <div className="bottom-nav">
         {NAV.map(({ to, label, icon: Icon, id }) => (

@@ -44,20 +44,20 @@ export default function Login() {
       <div className="login-grid" />
       <section className="login-panel">
         <div className="brand">
-          <span className="brand-mark">C</span>
-          <span>CONTINUUM</span>
+          <span className="brand-mark">K</span>
+          <span>KONTINŪM</span>
         </div>
         <p className="eyebrow">ORGANIZATIONAL RESILIENCE INTELLIGENCE</p>
-        <h1>Know what your organization depends on.</h1>
+        <h1>Ketahui apa yang ditopang organisasimu.</h1>
         <p className="login-copy">
-          A calm, evidence-led view of the people, processes and knowledge that keep work moving —
-          and what happens when one of them is unavailable.
+          Pandangan tenang dan berbasis bukti atas orang, proses, dan pengetahuan yang membuat
+          pekerjaan tetap berjalan — serta apa yang terjadi bila salah satunya tidak tersedia.
         </p>
 
         {stage === "request" ? (
           <form onSubmit={requestLink} data-testid="magic-link-form">
             <label>
-              Work email
+              Email kerja
               <input
                 type="email"
                 required
@@ -67,7 +67,7 @@ export default function Login() {
               />
             </label>
             <button className="primary-button" disabled={busy} data-testid="magic-link-submit-button">
-              {busy ? "Preparing your link…" : "Send magic link"}
+              {busy ? "Menyiapkan tautan…" : "Kirim magic link"}
               <ArrowRight size={16} />
             </button>
           </form>
@@ -75,15 +75,15 @@ export default function Login() {
           <div className="link-sent" data-testid="magic-link-sent-panel">
             <MailCheck size={18} />
             <div>
-              <b>Sign-in link ready for {email}</b>
-              <small>Single-use link, valid for 15 minutes. Email delivery is stubbed for the demo.</small>
+              <b>Tautan masuk siap untuk {email}</b>
+              <small>Sekali pakai, berlaku 15 menit. Pengiriman email masih disimulasikan untuk demo.</small>
             </div>
             <button className="primary-button" onClick={verify} disabled={busy} data-testid="magic-link-open-button">
-              {busy ? "Signing you in…" : "Open sign-in link"}
+              {busy ? "Memasukkan kamu…" : "Buka tautan masuk"}
               <ArrowRight size={16} />
             </button>
             <button className="text-button" onClick={() => setStage("request")} data-testid="magic-link-change-email-button">
-              Use a different email
+              Pakai email lain
             </button>
           </div>
         )}
@@ -96,7 +96,7 @@ export default function Login() {
 
         <div className="demo-note" data-testid="demo-access-note">
           <ShieldAlert size={16} />
-          <span>Demo workspace: Northstar Labs · 47 people · deterministic resilience model</span>
+          <span>Workspace demo: Northstar Labs · 47 orang · model ketahanan deterministik</span>
         </div>
       </section>
     </main>

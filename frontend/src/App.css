@@ -754,6 +754,120 @@ p { margin: 0; line-height: 1.6; }
   font-size: 0.82rem;
 }
 
+/* ---------- panel tanya AI & wawancara ---------- */
+
+.ask-trigger { color: var(--lime) !important; }
+.ask-header-button { padding: 9px 16px; }
+.mobile-actions { display: flex; gap: 8px; }
+
+.ask-overlay {
+  position: fixed; inset: 0; z-index: 70;
+  background: rgba(9, 13, 16, 0.72);
+  backdrop-filter: blur(10px);
+  display: flex; justify-content: flex-end;
+}
+.ask-panel {
+  width: min(520px, 100%);
+  height: 100%;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  padding: 26px;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 18px;
+  animation: slide-in 260ms ease both;
+}
+.ask-panel header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.ask-panel header h2 { margin: 8px 0; }
+.ask-thread { overflow-y: auto; display: grid; gap: 12px; align-content: start; }
+.ask-suggestions { display: grid; gap: 8px; }
+.ask-suggestions button {
+  text-align: left;
+  padding: 12px 14px;
+  border: 1px dashed var(--border);
+  font-size: 0.82rem;
+  color: var(--muted);
+  transition: color 160ms ease, border-color 160ms ease;
+}
+.ask-suggestions button:hover { color: var(--text); border-color: var(--lime); }
+.ask-message {
+  padding: 14px 16px;
+  font-size: 0.86rem;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  border: 1px solid var(--border);
+}
+.ask-user { background: var(--raised); color: var(--text); border-color: rgba(215, 243, 107, 0.3); }
+.ask-assistant { background: transparent; color: var(--muted); }
+.ask-form { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+.ask-form input {
+  padding: 13px 15px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.interview-body { overflow-y: auto; display: grid; gap: 16px; align-content: start; }
+.interview-question { display: grid; gap: 8px; font-size: 0.84rem; color: var(--muted); }
+.interview-question textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 12px;
+  resize: vertical;
+}
+.interview-question textarea:focus-visible { outline: 2px solid var(--lime); }
+
+/* ---------- pemilih orang, ekspor, briefing ---------- */
+
+.person-picker { display: flex; gap: 8px; flex-wrap: wrap; }
+.person-picker button {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  font-size: 0.8rem;
+  color: var(--muted);
+  transition: border-color 160ms ease, color 160ms ease, background-color 160ms ease;
+}
+.person-picker button b { font-family: var(--mono); color: var(--lime); margin-left: 8px; }
+.person-picker button:hover { color: var(--text); }
+.person-picker button.active { border-color: var(--lime); color: var(--text); background: var(--raised); }
+
+.small-button { padding: 7px 12px; font-size: 0.72rem; gap: 6px; }
+
+.export-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+  padding: 20px 24px;
+  border: 1px dashed var(--border);
+  background: var(--surface);
+}
+.export-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.share-link {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 14px 18px;
+  border: 1px solid rgba(215, 243, 107, 0.35);
+  background: rgba(215, 243, 107, 0.06);
+}
+.share-link a { color: var(--lime); font-size: 0.82rem; word-break: break-all; }
+
+.briefing-panel { border-color: rgba(215, 243, 107, 0.35); }
+.briefing-text {
+  white-space: pre-wrap;
+  font-size: 0.92rem;
+  line-height: 1.75;
+  color: var(--text);
+  margin-bottom: 16px;
+}
+
+/* ---------- halaman publik ---------- */
+
+.public-page { max-width: 1180px; margin: 0 auto; padding: 28px clamp(18px, 4vw, 44px) 80px; }
+.public-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+  padding-bottom: 22px; margin-bottom: 28px;
+  border-bottom: 1px solid var(--border);
+}
+
 /* ---------- motion ---------- */
 
 @keyframes rise {
@@ -822,4 +936,28 @@ p { margin: 0; line-height: 1.6; }
 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
+}
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (max-width: 900px) {
+  .ask-panel { width: 100%; border-left: none; }
+  .export-bar { flex-direction: column; align-items: flex-start; }
+  .ask-header-button { display: none; }
+}
+
+@media print {
+  body { background: #ffffff; color: #101519; }
+  .sidebar, .bottom-nav, .mobile-header, .context-header, .export-bar, .share-link,
+  .ask-overlay, .search-overlay, .page-intro > button, .simulation-setup, .back-button,
+  .public-header button, [data-testid="open-action-center-button"] { display: none !important; }
+  .main-content { margin: 0; padding: 0; }
+  .panel, .metric, .hero-score { border-color: #d5dad7; background: #ffffff; break-inside: avoid; }
+  .journey-values strong, h1, h2, h3, b, strong { color: #101519; }
+  .muted, .mono, .metric-label, .eyebrow, small, span { color: #4a5a5f; }
+  .result-grid, .metric-grid, .comparison-grid { grid-template-columns: 1fr; }
+  .bar i { background: #6a7d3f; }
 }

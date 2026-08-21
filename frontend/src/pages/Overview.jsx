@@ -7,7 +7,7 @@ import {
   Bar, ErrorState, EvidenceChip, LoadingState, Metric, ScoreRing, SectionHeading, StatusBadge,
 } from "@/components/primitives";
 
-export default function Overview({ onData }) {
+export default function Overview() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const navigate = useNavigate();
@@ -16,10 +16,7 @@ export default function Overview({ onData }) {
     setError("");
     api
       .get("/overview")
-      .then((response) => {
-        setData(response.data);
-        onData?.(response.data);
-      })
+      .then((response) => setData(response.data))
       .catch((err) => setError(messageFor(err)));
   };
 
@@ -34,35 +31,35 @@ export default function Overview({ onData }) {
     <div className="page" data-testid="overview-page">
       <div className="page-intro">
         <div>
-          <span className="eyebrow">ORGANIZATIONAL OVERVIEW</span>
-          <h1>Resilience, made visible.</h1>
-          <p>See where knowledge is concentrated — and what to strengthen next.</p>
+          <span className="eyebrow">RINGKASAN ORGANISASI</span>
+          <h1>Ketahanan yang terlihat jelas.</h1>
+          <p>Lihat di mana pengetahuan menumpuk — dan apa yang perlu diperkuat lebih dulu.</p>
         </div>
         <button
           className="secondary-button"
           onClick={() => navigate("/people/sarah-mitchell")}
           data-testid="explore-critical-dependencies-button"
         >
-          Explore top dependency <ArrowRight size={16} />
+          Telusuri ketergantungan teratas <ArrowRight size={16} />
         </button>
       </div>
 
       <section className="hero-score" data-testid="resilience-score-panel">
         <div className="hero-score-copy">
-          <span className="eyebrow">CURRENT RESILIENCE SCORE</span>
+          <span className="eyebrow">RESILIENCE SCORE SAAT INI</span>
           <div className="hero-number" data-testid="resilience-score-value">
             {score.current_score} <small>/ 100</small>
           </div>
           <StatusBadge tone="critical" testId="critical-dependency-badge">
-            {metrics.critical_people} critical human dependencies detected
+            {metrics.critical_people} ketergantungan manusia kritis terdeteksi
           </StatusBadge>
           <p className="muted">
-            Derived from knowledge documentation, backup ownership, process documentation and access
-            resilience — never from performance data.
+            Dihitung dari dokumentasi pengetahuan, kepemilikan backup, dokumentasi proses, dan
+            ketahanan akses — bukan dari data kinerja siapa pun.
           </p>
           <div className="dimension-list" data-testid="score-dimensions">
             {score.dimensions.map((dimension) => (
-              <div key={dimension.label} className="dimension-row" data-testid={`dimension-${dimension.label.toLowerCase().replaceAll(" ", "-")}`}>
+              <div key={dimension.label} className="dimension-row">
                 <span>{dimension.label}</span>
                 <Bar value={dimension.value} tone={dimension.value < 55 ? "warn" : ""} />
                 <b>{dimension.value}%</b>
@@ -73,7 +70,7 @@ export default function Overview({ onData }) {
         </div>
         <div className="trend-chart">
           <span className="chart-label">
-            SCORE TRAJECTORY <b>DETERMINISTIC MODEL</b>
+            LINTASAN SKOR <b>MODEL DETERMINISTIK</b>
           </span>
           <ResponsiveContainer width="100%" height={140}>
             <AreaChart data={trend}>
@@ -96,20 +93,20 @@ export default function Overview({ onData }) {
       </section>
 
       <div className="metric-grid">
-        <Metric label="Critical people" value={metrics.critical_people} note="High or critical dependency tier" tone="danger-text" />
-        <Metric label="Critical knowledge coverage" value={`${metrics.critical_knowledge_coverage}%`} note="Across critical and high items" />
-        <Metric label="Processes without backup" value={metrics.processes_without_backup} note="Of 18 mapped processes" tone="warning-text" />
-        <Metric label="Revenue exposed" value={money(metrics.revenue_at_risk)} note="Owned by critical dependencies" />
+        <Metric label="Orang kritis" value={metrics.critical_people} note="Tier High atau Critical" tone="danger-text" />
+        <Metric label="Cakupan pengetahuan kritis" value={`${metrics.critical_knowledge_coverage}%`} note="Untuk item kritis & tinggi" />
+        <Metric label="Proses tanpa backup" value={metrics.processes_without_backup} note="Dari 18 proses terpetakan" tone="warning-text" />
+        <Metric label="Pendapatan terekspos" value={money(metrics.revenue_at_risk)} note="Dipegang ketergantungan kritis" />
       </div>
 
       <div className="overview-grid">
         <section className="panel">
           <SectionHeading
-            eyebrow="FOCUS FIRST"
-            title="Critical dependencies"
+            eyebrow="FOKUS DULU DI SINI"
+            title="Ketergantungan kritis"
             action={
               <button className="text-button" onClick={() => navigate("/people")} data-testid="view-all-people-button">
-                View all people <ArrowRight size={14} />
+                Lihat semua orang <ArrowRight size={14} />
               </button>
             }
           />
@@ -126,8 +123,8 @@ export default function Overview({ onData }) {
                   <b>{person.name}</b>
                   <span>{person.role}</span>
                   <small>
-                    {person.critical_process_count} unbacked critical <i /> {person.client_count} clients <i />{" "}
-                    {person.knowledge_gap_count} knowledge gaps
+                    {person.critical_process_count} proses kritis tanpa backup <i /> {person.client_count} klien <i />{" "}
+                    {person.knowledge_gap_count} celah pengetahuan
                   </small>
                 </div>
                 <StatusBadge testId={`tier-${person.id}`}>{person.tier}</StatusBadge>
@@ -139,11 +136,11 @@ export default function Overview({ onData }) {
 
         <section className="panel">
           <SectionHeading
-            eyebrow="EVIDENCE LAYER"
-            title="Weakest critical knowledge"
-            action={<span className="mono">{metrics.critical_knowledge_coverage}% avg</span>}
+            eyebrow="LAPISAN BUKTI"
+            title="Pengetahuan kritis terlemah"
+            action={<span className="mono">rata-rata {metrics.critical_knowledge_coverage}%</span>}
           />
-          <p className="muted">Critical knowledge that is documented, validated and transferable.</p>
+          <p className="muted">Pengetahuan kritis yang sudah terdokumentasi, tervalidasi, dan bisa dialihkan.</p>
           {knowledge.map((item) => (
             <div className="coverage-row" key={item.id} data-testid={`knowledge-coverage-${item.id}`}>
               <div>
@@ -157,10 +154,11 @@ export default function Overview({ onData }) {
           <div className="evidence-callout">
             <ShieldAlert size={16} />
             <span>
-              <b>Evidence before inference.</b> Low coverage is a signal to validate, not a verdict on a person.
+              <b>Bukti dulu, kesimpulan kemudian.</b> Cakupan rendah adalah sinyal untuk divalidasi,
+              bukan penilaian atas seseorang.
             </span>
           </div>
-          <EvidenceChip confidence={0.94}>knowledge coverage assessment · {knowledge.length} refs</EvidenceChip>
+          <EvidenceChip confidence={0.94}>penilaian cakupan pengetahuan · {knowledge.length} rujukan</EvidenceChip>
         </section>
       </div>
     </div>

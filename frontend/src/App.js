@@ -11,6 +11,7 @@ import People from "@/pages/People";
 import HumanManual from "@/pages/HumanManual";
 import Simulator from "@/pages/Simulator";
 import ActionCenter from "@/pages/ActionCenter";
+import SharedScenario from "@/pages/SharedScenario";
 import "@/App.css";
 
 function Workspace() {
@@ -43,6 +44,7 @@ export default function App() {
       <Toaster theme="dark" position="bottom-right" />
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/bagikan/:token" element={<SharedScenario />} />
         <Route element={<Workspace />}>
           <Route path="/overview" element={<Overview />} />
           <Route path="/map" element={<DependencyMap />} />

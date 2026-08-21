@@ -6,6 +6,7 @@ import { api, messageFor } from "@/api";
 import { EmptyState, ErrorState, LoadingState, ScoreRing, StatusBadge } from "@/components/primitives";
 
 const TIERS = ["All", "Critical", "High", "Moderate", "Low"];
+const TIER_LABEL = { All: "Semua", Critical: "Critical", High: "High", Moderate: "Moderate", Low: "Low" };
 
 export default function People() {
   const [search, setSearch] = useState("");
@@ -35,12 +36,12 @@ export default function People() {
     body.append("file", file);
     try {
       const response = await api.post("/import/people", body);
-      toast.success(`${response.data.imported} people imported`, {
-        description: response.data.skipped ? `${response.data.skipped} rows skipped` : "Scores recalculated",
+      toast.success(`${response.data.imported} orang diimpor`, {
+        description: response.data.skipped ? `${response.data.skipped} baris dilewati` : "Skor sudah dihitung ulang",
       });
       load();
     } catch (err) {
-      toast.error("Import failed", { description: messageFor(err) });
+      toast.error("Impor gagal", { description: messageFor(err) });
     }
     event.target.value = "";
   };
@@ -49,12 +50,12 @@ export default function People() {
     <div className="page" data-testid="people-page">
       <div className="page-intro">
         <div>
-          <span className="eyebrow">PEOPLE / DEPENDENCY REGISTER</span>
-          <h1>Every person, every dependency.</h1>
-          <p>Dependency scores are derived from ownership, documentation and backup records only.</p>
+          <span className="eyebrow">ORANG / REGISTER KETERGANTUNGAN</span>
+          <h1>Setiap orang, setiap ketergantungan.</h1>
+          <p>Skor ketergantungan hanya berasal dari catatan kepemilikan, dokumentasi, dan backup.</p>
         </div>
         <button className="secondary-button" onClick={() => fileInput.current?.click()} data-testid="import-people-button">
-          <Upload size={15} /> Import CSV
+          <Upload size={15} /> Impor CSV
         </button>
         <input
           ref={fileInput}
@@ -70,7 +71,7 @@ export default function People() {
         <input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search name, role or team"
+          placeholder="Cari nama, peran, atau tim"
           data-testid="people-search-input"
         />
         <div className="tier-filters">
@@ -81,21 +82,21 @@ export default function People() {
               onClick={() => setTier(option)}
               data-testid={`people-tier-${option.toLowerCase()}-button`}
             >
-              {option}
+              {TIER_LABEL[option]}
             </button>
           ))}
         </div>
         <span className="mono" data-testid="people-count">
-          {data ? `${data.total} people` : "…"}
+          {data ? `${data.total} orang` : "…"}
         </span>
       </div>
 
       {error ? <ErrorState message={error} onRetry={load} /> : null}
-      {!error && !data ? <LoadingState label="Scoring dependencies…" /> : null}
+      {!error && !data ? <LoadingState label="Menghitung skor ketergantungan…" /> : null}
       {data && data.people.length === 0 ? (
         <EmptyState
-          title="No people match this filter"
-          body="Try a different tier, or clear the search to see the full register."
+          title="Tidak ada orang yang cocok"
+          body="Coba tier lain, atau hapus kata kuncinya untuk melihat seluruh register."
           testId="people-empty-state"
         />
       ) : null}
@@ -116,7 +117,7 @@ export default function People() {
                   {person.role} · {person.team}
                 </span>
                 <small>
-                  {person.process_count} processes <i /> {person.client_count} clients <i /> {person.trained_backups} trained backups
+                  {person.process_count} proses <i /> {person.client_count} klien <i /> {person.trained_backups} backup terlatih
                 </small>
               </div>
               <StatusBadge testId={`person-tier-${person.id}`}>{person.tier}</StatusBadge>
